@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.func import grad, vmap, functional_call
+from torch.func import grad_and_value, vmap, functional_call
 from torch.utils.data import DataLoader, Subset
 
 
@@ -130,8 +130,10 @@ class FLClient:
             out = functional_call(model, (params, buffers), x.unsqueeze(0))
             return F.cross_entropy(out, y.unsqueeze(0))
 
-        per_sample_grads = vmap(
-            grad(loss_for_one), in_dims=(None, None, 0, 0)
+        # grad_and_value returns (grad_dict, scalar_loss) per sample — one GPU kernel,
+        # no extra forward pass after optimizer.step() (avoids CUDA misaligned-address).
+        per_sample_grads, per_sample_losses = vmap(
+            grad_and_value(loss_for_one), in_dims=(None, None, 0, 0)
         )(named_params, named_buffers, x_batch, y_batch)
 
         if was_training:
@@ -141,7 +143,7 @@ class FLClient:
         norms_sq = sum(
             g.reshape(n, -1).norm(dim=1) ** 2 for g in per_sample_grads.values()
         )
-        norms = norms_sq.sqrt()                                       # [n]
+        norms = norms_sq.sqrt()                                        # [n]
         clip_coefs = torch.clamp(self.max_grad_norm / (norms + 1e-8), max=1.0)
 
         # Sum clipped gradients + Gaussian noise, then average over batch
@@ -149,12 +151,10 @@ class FLClient:
         optimizer.zero_grad()
         for name, p in model.named_parameters():
             if p.requires_grad:
-                g = per_sample_grads[name]                             # [n, *shape]
+                g = per_sample_grads[name]                              # [n, *shape]
                 coef = clip_coefs.reshape(n, *([1] * (g.dim() - 1)))
                 clipped_sum = (g * coef).sum(dim=0)
                 p.grad = (clipped_sum + torch.randn_like(clipped_sum) * sigma) / n
 
         optimizer.step()
-
-        with torch.no_grad():
-            return criterion(model(x_batch), y_batch).item()
+        return float(per_sample_losses.mean().item())

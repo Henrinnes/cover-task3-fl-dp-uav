@@ -1,9 +1,12 @@
 """
-COVER Task 3.2 — FL + DP + Blockchain + Incentive UAV Simulation
+COVER Task 3.2 — FL + DP + Blockchain + Incentive + MARL UAV Simulation
 Entry point. Run with:
 
   # Full simulation (all layers: FL + DP + Blockchain + Incentive + Security)
   python main.py --full
+
+  # MARL + all layers: DQN agents learn adaptive participation policies
+  python main.py --marl
 
   # FL + DP only (no blockchain)
   python main.py
@@ -27,7 +30,10 @@ import yaml
 
 from simulation.runner import SimulationRunner
 from simulation.full_runner import FullSimulationRunner
+from simulation.marl_runner import MARLSimulationRunner
+from marl.trainer import MARLFLTrainer
 from evaluation.metrics import plot_convergence, compare_dp_vs_nodp, privacy_accuracy_tradeoff
+from evaluation.marl_plots import plot_marl_results
 
 CONFIG = "config.yaml"
 
@@ -103,9 +109,21 @@ def main():
                         help="Compare DP vs no-DP (runs both, then plots)")
     parser.add_argument("--full", action="store_true",
                         help="Run full simulation with blockchain + incentive + security")
+    parser.add_argument("--marl", action="store_true",
+                        help="Run MARL+FL: DQN agents learn adaptive participation policies")
     parser.add_argument("--plot-only", action="store_true",
                         help="Only generate plots from existing results")
     args = parser.parse_args()
+
+    if args.marl:
+        runner  = MARLSimulationRunner(args.config)
+        trainer = MARLFLTrainer(runner, fed_q_interval=10)
+        results = trainer.train()
+        plot_marl_results(
+            marl_path="results/marl/marl_results.json",
+            output_dir="results/marl",
+        )
+        return
 
     if args.full:
         runner = FullSimulationRunner(args.config)
