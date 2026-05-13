@@ -131,7 +131,7 @@ class FLClient:
             return F.cross_entropy(out, y.unsqueeze(0))
 
         # grad_and_value returns (grad_dict, scalar_loss) per sample — one GPU kernel,
-        # no extra forward pass after optimizer.step() (avoids CUDA misaligned-address).
+        # no extra forward pass after optimizer.step().
         per_sample_grads, per_sample_losses = vmap(
             grad_and_value(loss_for_one), in_dims=(None, None, 0, 0)
         )(named_params, named_buffers, x_batch, y_batch)
@@ -139,11 +139,13 @@ class FLClient:
         if was_training:
             model.train()
 
-        # Per-sample L2 norms across all parameters
-        norms_sq = sum(
-            g.reshape(n, -1).norm(dim=1) ** 2 for g in per_sample_grads.values()
-        )
-        norms = norms_sq.sqrt()                                        # [n]
+        # Concatenate all per-sample gradients into one [n, total_params] matrix and
+        # force contiguous layout — vmap can return strided/non-contiguous tensors
+        # that cause CUDA misaligned-address errors on subsequent norm() calls.
+        flat_grads = torch.cat(
+            [g.contiguous().reshape(n, -1) for g in per_sample_grads.values()], dim=1
+        )                                                               # [n, D]
+        norms = flat_grads.norm(dim=1)                                  # [n]
         clip_coefs = torch.clamp(self.max_grad_norm / (norms + 1e-8), max=1.0)
 
         # Sum clipped gradients + Gaussian noise, then average over batch
@@ -151,7 +153,7 @@ class FLClient:
         optimizer.zero_grad()
         for name, p in model.named_parameters():
             if p.requires_grad:
-                g = per_sample_grads[name]                              # [n, *shape]
+                g = per_sample_grads[name].contiguous()                 # [n, *shape]
                 coef = clip_coefs.reshape(n, *([1] * (g.dim() - 1)))
                 clipped_sum = (g * coef).sum(dim=0)
                 p.grad = (clipped_sum + torch.randn_like(clipped_sum) * sigma) / n
