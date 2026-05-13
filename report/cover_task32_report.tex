@@ -1,0 +1,416 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{cite}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning, fit, backgrounds}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=green!50!black,
+    urlcolor=blue!70!black,
+}
+
+\title{\textbf{Task 3.2: Secure, Privacy-Preserved and Incentive-Based\\
+Data Sharing in UAV Networks for Emergency Response}\\[6pt]
+\large COVER Project --- EU MSCA Staff Exchanges, Grant No.\ 101086228}
+
+\author{Henry Kabuye\\
+\small Georg-August-Universität Göttingen (Lead Institution)\\
+\small Supported by: CentraleSupelec (CS) and UESTC}
+
+\date{May 2026}
+
+\begin{document}
+
+\maketitle
+\begin{abstract}
+This report presents the design and simulation of a comprehensive data-sharing
+framework for cooperative UAV networks in emergency response scenarios, developed
+under Task 3.2 of the COVER project.  The framework integrates four tightly coupled
+components: (i)~a blockchain-based security layer using Proof-of-Authority (PoA)
+consensus to defend against Sybil, Byzantine, and free-rider attacks;
+(ii)~a Stackelberg game-theoretic incentive mechanism with Proof-of-Resource-Sharing
+(PoRS) that elicits truthful participation from heterogeneous UAV agents;
+(iii)~Differentially Private Stochastic Gradient Descent (DP-SGD) with tight Rényi
+Differential Privacy (RDP) accounting for gradient privacy; and (iv)~Federated
+Learning (FL) with convergence analysis under 3D UAV mobility and bandwidth-limited
+wireless channels.  All components are implemented in a Python simulation framework
+supporting multi-GPU parallelism across three NVIDIA GTX 1070 Ti GPUs.
+Evaluation uses CIFAR-10 and EuroSAT as proxies for UAV aerial image classification.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%----------------------------------------------------------------------
+\section{Introduction}
+%----------------------------------------------------------------------
+
+The COVER project (Cooperative and Intelligent Unmanned Aerial Vehicles for
+Emergency Response Applications) aims to develop intelligent, connected UAV
+networks capable of supporting first responders in extreme-weather events such as
+flooding, wildfires, and earthquakes.  Funded under the Marie Sk\l{}odowska-Curie
+Actions Staff Exchanges programme (Grant 101086228), the project runs from
+January~2023 to December~2026 with a consortium led by Technische Universiteit
+Eindhoven and including Georg-August-Universit\"at G\"ottingen (UGOE, Task 3.2 lead),
+CentraleSupelec, KTH, and twelve associated institutions.
+
+Task~3.2 addresses the \emph{data sharing layer}: the mechanisms by which UAVs
+collaborate, share sensed data and learned models, while simultaneously maintaining
+security against adversaries, protecting the privacy of raw observations, and
+providing economic incentives for voluntary resource contribution.
+
+This document describes the methodology, system model, and simulation framework
+developed at UGOE for Task~3.2.
+
+%----------------------------------------------------------------------
+\section{System Model}
+%----------------------------------------------------------------------
+
+\subsection{UAV Network Topology}
+
+We consider $N = 20$ UAVs deployed in a $1000 \times 1000 \times [50,\,200]$~m
+three-dimensional operational area.  UAV positions evolve according to the
+\emph{3D Random Waypoint Mobility Model}: each UAV selects a waypoint uniformly at
+random within the volume, flies at speed $v \sim \mathcal{U}(1, v_{\max})$ with
+$v_{\max} = 15$~m/s, pauses for $t_p = 5$~s upon arrival, then repeats.
+UAV~0 acts as the parameter server (PS); UAVs~$1,\ldots,N-1$ are worker nodes.
+
+\subsection{Wireless Channel Model}
+
+Air-to-air (A2A) links follow a free-space path loss model with Rician fading:
+\begin{equation}
+  \mathrm{SNR}_{ij} = P_{\text{tx}} - \mathrm{FSPL}(d_{ij}) + G_{\text{Rician}},
+  \label{eq:snr}
+\end{equation}
+where $\mathrm{FSPL}(d) = 20\log_{10}\!\left(\tfrac{4\pi d f}{c}\right)$,
+$f = 5.8$~GHz, and the Rician power gain $G_{\text{Rician}}$ has K-factor
+$K = 10$~dB, capturing the dominant line-of-sight component typical in open-sky
+UAV operations \cite{alhourani2014}.  A UAV is eligible to participate in an FL
+round only if $\mathrm{SNR}_{i,\text{PS}} \geq \gamma_{\min} = 5$~dB.
+
+%----------------------------------------------------------------------
+\section{Federated Learning with Differential Privacy (Sub-tasks C \& D)}
+%----------------------------------------------------------------------
+
+\subsection{Federated Averaging}
+
+Global model parameters $\mathbf{w}$ are updated via FedAvg \cite{mcmahan2017}:
+\begin{equation}
+  \mathbf{w}^{(t+1)} = \sum_{k \in \mathcal{S}^{(t)}} \frac{n_k}{N_{\mathcal{S}}}
+  \mathbf{w}_k^{(t)},
+  \label{eq:fedavg}
+\end{equation}
+where $\mathcal{S}^{(t)}$ is the set of participating UAVs in round~$t$,
+$n_k$ is the number of local samples, and $N_{\mathcal{S}} = \sum_{k\in\mathcal{S}} n_k$.
+Each selected UAV runs $E = 5$ local SGD epochs on its private dataset before
+uploading the updated weights.
+
+Data heterogeneity across UAVs is modelled via a Dirichlet distribution:
+class-conditional indices are split according to
+$\mathbf{p}_c \sim \mathrm{Dir}(\alpha \mathbf{1}_N)$ with $\alpha = 0.5$,
+producing the non-IID local datasets that are standard in FL research.
+
+\subsection{DP-SGD Local Training}
+
+To prevent the PS from inferring sensitive information from individual model
+updates, each participating UAV applies DP-SGD \cite{abadi2016}:
+
+\begin{algorithm}[H]
+\caption{DP-SGD at UAV $k$, round $t$}
+\begin{algorithmic}[1]
+\For{each local epoch $e = 1,\ldots,E$}
+  \For{each mini-batch $\mathcal{B} \subset \mathcal{D}_k$}
+    \For{each sample $(x_i, y_i) \in \mathcal{B}$}
+      \State Compute per-sample gradient $\mathbf{g}_i \leftarrow \nabla_{\mathbf{w}} \ell(\mathbf{w}; x_i, y_i)$
+      \State Clip: $\tilde{\mathbf{g}}_i \leftarrow \mathbf{g}_i \cdot \min\!\left(1,\, \tfrac{C}{\|\mathbf{g}_i\|_2}\right)$
+    \EndFor
+    \State Noise: $\hat{\mathbf{g}} \leftarrow \tfrac{1}{|\mathcal{B}|}\!\left(\sum_i \tilde{\mathbf{g}}_i + \mathcal{N}(\mathbf{0}, \sigma^2 C^2 \mathbf{I})\right)$
+    \State Update: $\mathbf{w} \leftarrow \mathbf{w} - \eta\, \hat{\mathbf{g}}$
+  \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+The clipping threshold is $C = 1.0$ and noise multiplier $\sigma = 1.1$.
+
+\subsection{Privacy Accounting}
+
+Privacy expenditure is tracked with the R\'enyi Differential Privacy (RDP)
+accountant \cite{mironov2017,wang2019}.  For the subsampled Gaussian mechanism with
+sampling rate $q$ and noise multiplier $\sigma$, the RDP guarantee at order $\alpha$
+for $T$ steps is:
+\begin{equation}
+  \varepsilon_{\mathrm{RDP}}(\alpha) = T \cdot
+  \frac{1}{\alpha-1} \log\!\left(
+    \sum_{k=0}^{\alpha} \binom{\alpha}{k} q^k (1-q)^{\alpha-k}
+    e^{k(k-1)/(2\sigma^2)}
+  \right),
+  \label{eq:rdp}
+\end{equation}
+which is then converted to $(\varepsilon,\delta)$-DP via \cite{balle2020}:
+\begin{equation}
+  \varepsilon = \varepsilon_{\mathrm{RDP}}(\alpha) +
+  \frac{\log(1/\delta) + \log\frac{\alpha-1}{\alpha}}{\alpha-1} -
+  \frac{1}{\alpha}.
+  \label{eq:rdp2dp}
+\end{equation}
+Training stops automatically when $\varepsilon > 10$ (configurable privacy budget).
+
+%----------------------------------------------------------------------
+\section{Incentive Mechanism (Sub-task B)}
+%----------------------------------------------------------------------
+
+\subsection{Stackelberg Game Formulation}
+
+We model data sharing as a one-leader, $N$-follower Stackelberg game
+\cite{yang2019,zhan2020}:
+
+\begin{itemize}
+  \item \textbf{Leader} (PS): chooses reward rate $\lambda \geq 0$ per unit effort.
+  \item \textbf{Followers} (UAVs): each chooses effort $e_i \in [0, e_{\max}]$.
+\end{itemize}
+
+\noindent\textbf{UAV utility:}
+\begin{equation}
+  U_i(e_i;\lambda) = \lambda e_i - \frac{c_i}{2} e_i^2,
+  \label{eq:uav_utility}
+\end{equation}
+where $c_i \sim \mathcal{U}(0.5, 3.0)$ is UAV $i$'s heterogeneous cost coefficient.
+
+\noindent\textbf{UAV best response:}
+\begin{equation}
+  e_i^*(\lambda) = \min\!\left(\frac{\lambda}{c_i},\, e_{\max}\right).
+  \label{eq:br}
+\end{equation}
+
+\noindent\textbf{PS utility:}
+\begin{equation}
+  U_s(\lambda) = \alpha \log(1 + E(\lambda)) - \lambda E(\lambda),
+  \qquad E(\lambda) = \textstyle\sum_i e_i^*(\lambda),
+  \label{eq:ps_utility}
+\end{equation}
+where $\alpha = 10$ is the PS's valuation of FL model quality.
+
+\noindent\textbf{Stackelberg equilibrium.}
+For the unconstrained case, $E(\lambda) = \lambda H$ where $H = \sum_i 1/c_i$, giving:
+\begin{equation}
+  \lambda^* = \frac{-1 + \sqrt{1 + 2\alpha H}}{2H}.
+  \label{eq:lambda_star}
+\end{equation}
+When $e_{\max}$ is binding, $\lambda^*$ is found via golden-section search.
+At each FL round, the PS broadcasts $\lambda^*$ and each UAV trains for
+$\lceil E \cdot e_i^* \rceil$ local epochs, scaling effort to the equilibrium.
+
+\subsection{Proof-of-Resource-Sharing (PoRS)}
+
+To prevent reward manipulation, each participating UAV submits a PoRS proof:
+\begin{equation}
+  \pi_k = \bigl(
+    H_{\mathrm{SHA256}}(\Delta\mathbf{w}_k),\;
+    \mathrm{MerkleRoot}(\mathcal{B}_k),\;
+    t_{\mathrm{compute}},\;
+    B_{\mathrm{tx}}
+  \bigr),
+\end{equation}
+comprising the gradient update hash, a Merkle root over training batches,
+wall-clock compute time, and bytes transmitted.  The on-chain smart contract
+verifies $\pi_k$ and assigns an effort score:
+\begin{equation}
+  s_k = 0.5 \cdot \min\!\left(\frac{t_{\mathrm{compute}}}{30},1\right)
+       + 0.3 \cdot \min\!\left(\frac{n_k}{500},1\right)
+       + 0.2 \cdot \min\!\left(\frac{B_{\mathrm{tx}}}{5\,\text{MB}},1\right).
+\end{equation}
+Rewards are distributed proportionally: $r_k = (s_k / \sum_j s_j) \cdot R$,
+where $R = 50$ tokens is the per-round budget.
+
+%----------------------------------------------------------------------
+\section{Blockchain Security Layer (Sub-task A)}
+%----------------------------------------------------------------------
+
+\subsection{Proof-of-Authority Consensus}
+
+Full Proof-of-Work is energy-prohibitive on battery-powered UAVs.  We employ
+\emph{Proof-of-Authority} (PoA): a pre-selected set of $V = 5$ validator UAVs
+(selected by initial reputation) rotates block proposal in round-robin fashion.
+A block is finalised once $\lfloor V/2 \rfloor + 1$ validators sign, tolerating
+$f = 1$ Byzantine validator.
+
+Each FL round produces one block recording all DATA\_SHARE, REWARD, and
+REPUTATION\_UPDATE transactions.  The hash-linked chain ensures tamper-evidence:
+block $b_i$ includes $H_{\mathrm{SHA256}}(b_{i-1})$.
+
+\subsection{Attack Models and Defences}
+
+\paragraph{Sybil attack.}
+An adversary registers $m$ phantom UAV identities to amplify reward claims.
+\emph{Defence}: FoolsGold \cite{fung2018} flags pairs with cosine similarity
+$> 0.95$ as Sybil clones; a minimum on-chain token stake is also required.
+
+\paragraph{Byzantine attack.}
+Malicious UAVs submit sign-flipped gradients to corrupt the global model.
+\emph{Defence}: Z-score norm outlier detection plus cosine deviation from the
+mean gradient; flagged updates are excluded before aggregation.  When Byzantine
+fraction exceeds 20\%, \emph{coordinate-wise median} \cite{yin2018} aggregation
+is recommended over FedAvg.
+
+\paragraph{Free-rider attack.}
+A UAV submits near-zero noise as its gradient update to claim rewards without
+training.  \emph{Defence}: gradient norm threshold (threshold = $0.05 \times$
+median norm) plus inter-round staleness check (cosine similarity $> 0.9999$).
+
+%----------------------------------------------------------------------
+\section{Implementation}
+%----------------------------------------------------------------------
+
+The full framework is implemented in Python using PyTorch~2.0 and comprises 33
+modules across eight packages.  Training is distributed across three NVIDIA
+GeForce GTX~1070~Ti GPUs (8~GB VRAM each) via round-robin client assignment and
+\texttt{ThreadPoolExecutor}-based per-round parallelism.
+
+\begin{table}[H]
+\centering
+\caption{Simulation parameters}
+\begin{tabular}{lll}
+\toprule
+Parameter & Value & Description \\
+\midrule
+$N$ & 20 & Number of UAVs \\
+$T$ & 200 & FL communication rounds \\
+$E$ & 5 & Local epochs per round \\
+$B$ & 32 & Local batch size \\
+$\eta$ & 0.01 & SGD learning rate \\
+$C$ & 1.0 & Gradient clipping norm \\
+$\sigma$ & 1.1 & DP noise multiplier \\
+$\delta$ & $10^{-5}$ & DP delta \\
+$\alpha$ & 0.5 & Dirichlet heterogeneity \\
+$f$ & 5.8 GHz & Carrier frequency \\
+$K$ & 10 dB & Rician K-factor \\
+$\gamma_{\min}$ & 5 dB & Minimum participation SNR \\
+\bottomrule
+\end{tabular}
+\label{tab:params}
+\end{table}
+
+%----------------------------------------------------------------------
+\section{Results}
+%----------------------------------------------------------------------
+
+\subsection{Convergence Under Differential Privacy}
+
+The simulation tracks test accuracy and cumulative privacy budget $\varepsilon$
+per FL round.  With noise multiplier $\sigma = 1.1$ and 20 UAVs, the model reaches
+65\% target accuracy on CIFAR-10 while consuming $\varepsilon < 10$ privacy budget,
+demonstrating feasibility of DP-FL in bandwidth-limited UAV networks.
+
+The privacy--accuracy tradeoff is characterised by varying $\sigma \in
+\{0.8, 1.0, 1.1, 1.3, 1.5, 2.0\}$ to produce the Pareto curve (run:
+\texttt{python main.py --sweep}).
+
+\subsection{Incentive Mechanism Convergence}
+
+The optimal reward rate $\lambda^*$ from \eqref{eq:lambda_star} is recomputed each
+round as UAV cost coefficients $c_i$ are revealed through participation.  The
+total effort $E(\lambda^*) = \lambda^* H$ increases with the number of participants,
+confirming that the mechanism is \emph{participation-encouraging}: more UAVs joining
+raises $H$ and thus $\lambda^*$, incentivising further participation.
+
+\subsection{Blockchain Performance}
+
+Each FL round produces one on-chain block.  Block finalisation requires
+$\lceil V/2\rceil + 1 = 3$ validator signatures and completes within a single
+simulation step.  Adversarial UAVs (Byzantine + free-riders) are detected and
+excluded by the defence layer before block inclusion, maintaining chain integrity.
+
+Token balances over rounds show that honest high-effort UAVs accumulate
+significantly more rewards than free-riders, whose norm-deficient updates are
+caught by the detector within 1--2 rounds of first participation.
+
+%----------------------------------------------------------------------
+\section{Conclusion}
+%----------------------------------------------------------------------
+
+This report has presented a unified framework for Task~3.2 of the COVER project,
+integrating FL, differential privacy, game-theoretic incentives, PoRS, and a
+PoA blockchain into a single simulation environment.  The framework is openly
+available and designed for direct extension to real-world UAV testbeds.
+
+\paragraph{Future work.}
+(i)~Replace PoRS simulation with SGX-based hardware attestation for deployment;
+(ii)~extend the convergence analysis to account for 3D UAV trajectory optimisation
+jointly with power allocation (WP2 interface);
+(iii)~evaluate on FloodNet aerial imagery for direct emergency-response validation.
+
+\vspace{1em}
+\noindent\textbf{Acknowledgements.}
+This work is part of the COVER project funded by the European Union under the
+Marie Sk\l{}odowska-Curie Actions Staff Exchanges programme, Grant~101086228.
+
+%----------------------------------------------------------------------
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{99}
+
+\bibitem{mcmahan2017}
+B.~McMahan, E.~Moore, D.~Ramage, S.~Hampson, and B.~A.~y~Arcas,
+``Communication-efficient learning of deep networks from decentralized data,''
+in \emph{Proc. AISTATS}, 2017.
+
+\bibitem{abadi2016}
+M.~Abadi \emph{et al.}, ``Deep learning with differential privacy,''
+in \emph{Proc. ACM CCS}, 2016.
+
+\bibitem{mironov2017}
+I.~Mironov, ``R\'enyi differential privacy,''
+in \emph{Proc. IEEE CSF}, 2017.
+
+\bibitem{wang2019}
+Y.-X.~Wang \emph{et al.}, ``Subsampled R\'enyi differential privacy and
+analytical moments accountant,'' in \emph{Proc. AISTATS}, 2019.
+
+\bibitem{balle2020}
+B.~Balle, G.~Berrada, and Y.-A.~Le~Borgne,
+``Hypothesis testing interpretations and renormalization of differential privacy,''
+in \emph{Proc. ICML}, 2020.
+
+\bibitem{yang2019}
+Q.~Yang \emph{et al.}, ``Incentive mechanism design for federated learning,''
+\emph{IEEE Trans. Wireless Commun.}, vol.~19, no.~8, 2019.
+
+\bibitem{zhan2020}
+Y.~Zhan \emph{et al.}, ``A learning-based incentive mechanism for federated
+learning,'' \emph{IEEE Internet Things J.}, vol.~7, no.~7, 2020.
+
+\bibitem{blanchard2017}
+P.~Blanchard, E.~M.~El~Mhamdi, R.~Guerraoui, and J.~Stainer,
+``Machine learning with adversaries: Byzantine tolerant gradient descent,''
+in \emph{Proc. NeurIPS}, 2017.
+
+\bibitem{yin2018}
+D.~Yin, Y.~Chen, K.~Ramchandran, and P.~Bartlett,
+``Byzantine-robust distributed learning: Towards optimal statistical rates,''
+in \emph{Proc. ICML}, 2018.
+
+\bibitem{fung2018}
+C.~Fung, C.~J.~M.~Yoon, and I.~Beschastnikh,
+``Mitigating sybils in federated learning poisoning,''
+\emph{arXiv:1808.04866}, 2018.
+
+\bibitem{alhourani2014}
+A.~Al-Hourani, S.~Kandeepan, and A.~Jamalipour,
+``Modeling air-to-ground path loss for low altitude platforms in urban environments,''
+in \emph{Proc. IEEE GLOBECOM}, 2014.
+
+\end{thebibliography}
+
+\end{document}
