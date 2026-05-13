@@ -1,0 +1,15 @@
+Task 3.2 Secure, privacy-preserved and incentive-based data sharing scheme. (Lead: UGOE, PM=9; supported by CS, PM=9; and
+
+UESTC, PM=7.)
+
+ 
+
+• Develop blockchain-based security mechanisms for data sharing in UAV networks from malicious attacks in emergency environment.
+
+• Develop incentive-based scheme to facilitate information exchange in flexible UAV networks where proof of resource sharing and game theory will be used in the above blockchain system.
+
+• Differential privacy based data sharing scheme will be studied and applied in UAV networks. Additionally, federated learning (FL) based privacy-preserved mechanism will be considered and developed to enable information (or intelligence) exchange and fusion
+
+between UAVs over bandwidth limited wireless networks.
+
+• Convergence analysis for FL in 3D environment will also be analysed to show how network topology and wireless factors can impact the convergence of FL. Then, the minimal number of communication rounds (or convergence round) will be determined for achieving FL convergence by jointly designing power allocation and scheduling of the UAV network with the input from WP2.

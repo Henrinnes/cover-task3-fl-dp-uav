@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Data — datasets are large and auto-downloaded
+fl_dp_uav/data/cifar10/
+fl_dp_uav/data/eurosat/
+fl_dp_uav/data/floodnet/
+fl_dp_uav/data/aider/
+
+# Simulation results (regeneratable)
+fl_dp_uav/results/
+
+# LaTeX build artefacts
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+report/*.synctex.gz
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

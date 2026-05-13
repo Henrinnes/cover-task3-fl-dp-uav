@@ -1,0 +1,66 @@
+uav_network:
+  num_uavs: 20
+  area_size: [1000, 1000]     # metres (x, y)
+  min_altitude: 50            # metres
+  max_altitude: 200           # metres
+
+mobility:
+  model: random_waypoint
+  max_speed: 15.0             # m/s
+  pause_time: 5.0             # seconds
+  step_dt: 1.0                # seconds per mobility step
+
+channel:
+  frequency: 5800000000.0     # Hz (5.8 GHz, typical UAV band)
+  path_loss_exponent: 2.3     # slightly above free-space due to A2A scattering
+  rician_k: 10.0              # dB K-factor (dominant LoS in air)
+  noise_power_dbm: -100.0
+  bandwidth_hz: 10000000.0    # Hz (10 MHz channel)
+
+fl:
+  num_rounds: 200
+  local_epochs: 5
+  local_batch_size: 32
+  learning_rate: 0.01
+  fraction_participate: 0.6   # fraction of eligible UAVs per round
+  target_accuracy: 0.65       # convergence threshold
+
+dp:
+  enabled: true
+  max_grad_norm: 1.0          # gradient clipping threshold C
+  noise_multiplier: 1.1       # σ — trades accuracy for privacy
+  target_epsilon: 10.0        # stop if ε budget exceeded
+  target_delta: 1.0e-5        # δ for (ε, δ)-DP guarantee
+
+power:
+  max_power_dbm: 23.0
+  min_snr_db: 5.0             # minimum SNR to participate in a round
+
+data:
+  # Options: cifar10 (auto-download) | eurosat (auto-download, aerial) | custom
+  dataset: cifar10
+  data_dir: ./data/cifar10
+  dirichlet_alpha: 0.5        # non-IID heterogeneity (lower = more skewed)
+
+simulation:
+  seed: 42
+  num_trials: 3
+  log_interval: 10            # evaluate every N rounds
+
+# ── Incentive layer (Task 3.2-B) ──────────────────────────────────────────────
+incentive:
+  quality_weight: 10.0        # α: PS valuation of FL model quality
+  cost_mode: heterogeneous    # homogeneous | heterogeneous | adversarial
+
+# ── Security layer (Task 3.2-A) ───────────────────────────────────────────────
+security:
+  aggregation: fedavg         # fedavg | median | trimmed_mean
+  byzantine_fraction: 0.10    # fraction of UAVs with Byzantine behaviour
+  byzantine_mode: sign_flip   # random | sign_flip | label_flip
+  free_rider_fraction: 0.10   # fraction of UAVs that free-ride
+  free_rider_mode: noise      # zero | stale | noise
+
+# ── Blockchain layer (Task 3.2-A) ─────────────────────────────────────────────
+blockchain:
+  num_validators: 5           # UAVs in PoA validator set (highest reputation)
+  fault_tolerance: 1          # tolerate f Byzantine validators (need 2f+1 validators)
