@@ -174,6 +174,6 @@ free-riders automatically.
 
 ## Acknowledgements
 
-This work was carried out at **Northumbria University** as part of the COVER project (Cooperative and Intelligent UAVs for Emergency Response Applications), funded by the European Union under the Marie Skłodowska-Curie Actions Staff Exchanges programme, Grant Agreement No. 101086228.
+This work was carried out at **Northumbria University** (supervised by **Professor Nauman Aslam**) as part of the COVER project (Cooperative and Intelligent UAVs for Emergency Response Applications), funded by the European Union under the Marie Skłodowska-Curie Actions Staff Exchanges programme, Grant Agreement No. 101086228.
 
 Task 3.2 is led by Georg-August-Universität Göttingen (UGOE) with contributions from CentraleSupelec and UESTC. Consortium: TU Eindhoven (coordinator), KTH, CentraleSupelec, Georg-August-Universität Göttingen, Northumbria University, and 12 associated institutions.
