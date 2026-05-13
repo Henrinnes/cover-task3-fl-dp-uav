@@ -19,8 +19,9 @@ develops cooperative, intelligent UAV systems for emergency response (flooding, 
 |---|---|---|
 | A — Security | Blockchain (PoA) + Byzantine/Sybil defences | Implemented |
 | B — Incentives | Stackelberg game + Proof-of-Resource-Sharing | Implemented |
-| C — Differential Privacy | DP-SGD + RDP accountant | Implemented |
+| C — Differential Privacy | DP-SGD (vmap) + RDP accountant | Implemented |
 | D — Federated Learning | FedAvg + 3D convergence analysis | Implemented |
+| E — Agentic Framework | MARL: DQN agents + federated Q-learning | Implemented |
 
 ---
 
@@ -29,15 +30,16 @@ develops cooperative, intelligent UAV systems for emergency response (flooding, 
 ```
 fl_dp_uav/
 ├── uav_network/          UAV topology, 3D random-waypoint mobility, Rician A2A channel
-├── federated_learning/   FedAvg server, DP-SGD client, convergence tracker
+├── federated_learning/   FedAvg server, DP-SGD client (vmap), convergence tracker
 ├── differential_privacy/ Gradient clipping/noise (Abadi et al. 2016), RDP accountant
 ├── incentive/            Stackelberg game (optimal λ*), Proof-of-Resource-Sharing
 ├── blockchain/           Block/Transaction, hash-linked chain, PoA consensus, smart contract
 ├── security/             Sybil/Byzantine/free-rider attacks + FoolsGold/median defences
-├── models/               SimpleCNN (32×32 RGB, proxy for aerial image classification)
+├── marl/                 DQN agents, federated Q-learning, MARL environment + trainer
+├── models/               SimpleCNN (GroupNorm, 32×32 RGB, proxy for aerial classification)
 ├── data/                 CIFAR-10 & EuroSAT loaders, Dirichlet non-IID partitioning
-├── simulation/           SimulationRunner (FL+DP) and FullSimulationRunner (all layers)
-└── evaluation/           Convergence plots, DP vs no-DP comparison, privacy–accuracy Pareto
+├── simulation/           SimulationRunner, FullSimulationRunner, MARLSimulationRunner
+└── evaluation/           Convergence plots, DP vs no-DP, privacy–accuracy Pareto, MARL plots
 ```
 
 ### Multi-GPU parallelism
@@ -172,6 +174,6 @@ free-riders automatically.
 
 ## Acknowledgements
 
-This work is part of the COVER project (Cooperative and Intelligent UAVs for Emergency Response Applications), funded by the European Union under the Marie Skłodowska-Curie Actions Staff Exchanges programme, Grant Agreement No. 101086228.
+This work was carried out at **Northumbria University** as part of the COVER project (Cooperative and Intelligent UAVs for Emergency Response Applications), funded by the European Union under the Marie Skłodowska-Curie Actions Staff Exchanges programme, Grant Agreement No. 101086228.
 
-Partners: TU Eindhoven (coordinator), KTH, CentraleSupelec, Georg-August-Universität Göttingen, and 12 associated institutions.
+Task 3.2 is led by Georg-August-Universität Göttingen (UGOE) with contributions from CentraleSupelec and UESTC. Consortium: TU Eindhoven (coordinator), KTH, CentraleSupelec, Georg-August-Universität Göttingen, Northumbria University, and 12 associated institutions.
