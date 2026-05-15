@@ -14,8 +14,12 @@ fl_dp_uav/data/eurosat/
 fl_dp_uav/data/floodnet/
 fl_dp_uav/data/aider/
 
-# Simulation results (regeneratable)
+# Simulation results (regeneratable — large sweeps excluded)
 fl_dp_uav/results/
+# Keep committed research outputs
+!fl_dp_uav/results/marl/
+!fl_dp_uav/results/marl/marl_results.json
+!fl_dp_uav/results/marl/marl_results.pdf
 
 # LaTeX build artefacts
 report/*.aux

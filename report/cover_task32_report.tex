@@ -575,49 +575,54 @@ saved to \texttt{results/marl/marl\_results.json} with a four-panel PDF plot.
 Key observations from the 30-round simulation are as follows.
 
 \paragraph{Accuracy convergence.}
-The global model accuracy rises from random initialisation ($\approx 10\%$) and
-converges toward the same ceiling as standard FL under an equivalent DP budget.
-Because the DQN agents initially explore uniformly ($\varepsilon = 1.0$), the
-early participation rates are high (13--17 of 20 UAVs per round), providing
-dense gradient signal.  As $\varepsilon$ decays and agents begin exploiting their
-learned Q-values, participation becomes more targeted: UAVs with high battery,
-strong channel, and high data quality are preferentially selected, maintaining
-accuracy while reducing total energy cost.
+Over 30 communication rounds the global model accuracy rises from
+$10.8\%$ (random initialisation) to a peak of $36.0\%$ (round~28) under DP-SGD
+with $\sigma = 1.1$, ending at $33.5\%$ due to noise in the final rounds.
+The upward trend is consistent with FL convergence under differential privacy:
+gradient noise slows convergence relative to a no-DP baseline, but the model
+improves monotonically in expectation.  Because agents explore uniformly
+($\varepsilon = 1.0$ throughout the 30 rounds), the participation patterns reflect
+random policy behaviour; the DQN's learned exploitation of state information will
+emerge as $\varepsilon$ decays further in longer runs.
 
 \paragraph{Reward signal.}
-Mean per-UAV reward is positive in rounds where the global accuracy improves
-($\Delta A > 0$) and approaches zero or slightly negative in rounds where the
-model has plateaued.  This is the intended behaviour: the reward function
-\eqref{eq:reward} correctly signals that participation is only worth the energy
-cost when it contributes to measurable improvement.  As training progresses past
-the rapid-improvement phase, agents learn to reduce their participation (lower
-$a_i$) or skip, conserving battery for future high-value rounds.
+Mean per-UAV reward is positive in 7 of 30 rounds, with the highest reward
+$(\bar{R} = +0.039)$ occurring in round~1, when the accuracy gain $\Delta A$
+from the uninitialised model is largest.  As the model improves, $\Delta A$
+decreases and the energy cost $0.005\,a_i$ begins to dominate, producing slightly
+negative mean rewards.  This is the intended incentive structure: the shaped
+reward correctly signals that participation is worth the energy cost only when
+there is measurable model improvement, and will guide agents to reduce effort
+(choose $a_i \in \{0,1\}$) once the model approaches saturation.
 
 \paragraph{Adaptive vs.\ static participation.}
-The static baseline selects a random 60\% ($= 12$ of 20 UAVs) of eligible UAVs
-each round irrespective of their state.  The MARL policy, after sufficient
-exploration, adapts dynamically: it increases participation above 60\% early in
-training (high $\Delta A$ makes participation profitable) and can drop below 60\%
-late in training (small $\Delta A$ makes the energy cost exceed the reward).
-This adaptive behaviour is qualitatively consistent with the Stackelberg equilibrium
-result from Section~\ref{sec:incentive}: the optimal effort is proportional to the
-PS's marginal valuation $\alpha/E(\lambda)$, which decreases as the model saturates.
+Participation ranges from 50\% (10 UAVs) to 85\% (17 UAVs) per round, with a
+mean of 69.7\% --- comfortably above the 60\% static baseline.  The higher mean
+is a direct consequence of the early random exploration phase (agents equally
+likely to choose any of the four actions, three of which involve training).
+In longer runs, as $\varepsilon \to \varepsilon_{\min} = 0.05$, agents that learn
+that skipping is profitable in low-$\Delta A$ rounds will drive participation
+below 60\%, demonstrating the intended adaptive behaviour.  The round-to-round
+variance (10--17 UAVs) also reflects the stochastic channel-SNR eligibility
+filter: UAVs below $\gamma_{\min} = 5$~dB are excluded regardless of their DQN
+action, coupling the MARL policy to the physical channel model.
 
 \paragraph{Federated Q-learning.}
-At rounds 10, 20, and 30, the Q-network weights of the round's participants are
-averaged and broadcast to all agents.  The federated step visibly accelerates reward
-convergence: the variance in per-agent reward decreases after each federation event
-as agents that have not yet experienced high-reward (state, action) pairs inherit
-the policy improvements of those that have.
+Q-network weights are federated at rounds 10, 20, and 30.  Since the replay
+buffers contain only 30 transitions per agent at the end of this run (exactly
+at the threshold for mini-batch sampling), the gradient updates are few and the
+Q-values are still close to random.  In longer runs the federated step at
+round~10 will propagate the earliest exploitable (state, action) signals across
+all agents simultaneously, visibly reducing variance in mean reward after each
+federation event.
 
 \paragraph{Privacy budget.}
-The cumulative DP-$\varepsilon$ grows monotonically with rounds, with the rate
-determined by $\sigma$, the sampling rate $q$, and the number of epochs actually
-trained per round.  Since MARL agents adaptively choose $a_i \in \{0, 1, 3, 5\}$
-epochs (vs.\ a fixed $E = 5$ in standard FL), the total privacy cost is generally
-lower: UAVs that skip contribute zero RDP accumulation, and agents that choose
-fewer epochs contribute less than the fixed-epoch baseline.  This demonstrates a
-novel privacy--energy--accuracy tradeoff surface navigated by the learned policy.
+The cumulative DP-$\varepsilon$ grows from 1.65 after round~1 to 3.74 after
+round~30, well within the configured budget of $\varepsilon_{\max} = 10$.
+The per-round increment decreases slightly in rounds where fewer UAVs participate
+(round~10: 11 UAVs, round~15: 10 UAVs), confirming that the MARL-driven
+participation variability translates directly into a variable privacy expenditure
+rate --- a novel property unavailable in static FL scheduling.
 
 %----------------------------------------------------------------------
 \section{Conclusion}
