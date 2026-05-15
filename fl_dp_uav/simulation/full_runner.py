@@ -227,6 +227,11 @@ class FullSimulationRunner(SimulationRunner):
                     raw_updates.append((cid, w))
                     training_times[cid] = elapsed
 
+            # Release cached CUDA memory after each round's vmap passes to
+            # prevent gradual memory fragmentation from inflating round times.
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
             # 5. Security filtering
             _, byz_flagged = self.byzantine_defense.detect(raw_updates)
             genuine, fr_flagged = self.freerider_detector.detect(raw_updates)
