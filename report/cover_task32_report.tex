@@ -574,6 +574,25 @@ The MARL simulation is run via \texttt{python main.py --marl} and results are
 saved to \texttt{results/marl/marl\_results.json} with a four-panel PDF plot.
 Key observations from the 30-round simulation are as follows.
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{marl_results.pdf}
+  \caption{%
+    MARL + Federated Learning simulation results over 30 communication rounds
+    (20 UAVs, all layers active).
+    \textbf{Top-left}: Global test accuracy trajectory under DP-SGD ($\sigma=1.1$),
+    rising from 10.8\% to a peak of 36.0\% at round~28.
+    \textbf{Top-right}: Mean per-UAV DQN reward; positive in the rapid-improvement
+    phase, slightly negative once the accuracy gain $\Delta A$ falls below the
+    energy cost threshold.
+    \textbf{Bottom-left}: Adaptive participation rate (purple) versus the static
+    60\% baseline (dashed); MARL participation ranges 50--85\%, averaging 69.7\%.
+    \textbf{Bottom-right}: Cumulative privacy budget consumption (DP-$\varepsilon$),
+    reaching 3.74 after 30 rounds, well within the $\varepsilon_{\max}=10$ limit.
+  }
+  \label{fig:marl_results}
+\end{figure}
+
 \paragraph{Accuracy convergence.}
 Over 30 communication rounds the global model accuracy rises from
 $10.8\%$ (random initialisation) to a peak of $36.0\%$ (round~28) under DP-SGD
