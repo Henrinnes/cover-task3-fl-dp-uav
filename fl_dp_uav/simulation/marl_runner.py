@@ -112,6 +112,9 @@ class MARLSimulationRunner(FullSimulationRunner):
                 raw_updates.append((cid, w))
                 training_times[cid] = elapsed
 
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         # Security filtering
         _, byz_flagged = self.byzantine_defense.detect(raw_updates)
         genuine, fr_flagged = self.freerider_detector.detect(raw_updates)

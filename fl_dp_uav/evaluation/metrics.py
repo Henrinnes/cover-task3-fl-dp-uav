@@ -112,3 +112,103 @@ def privacy_accuracy_tradeoff(
     if show:
         plt.show()
     return fig
+
+
+def plot_full_results(
+    fl_path: str,
+    bc_path: str,
+    output_dir: str = "./results/full",
+    show: bool = False,
+) -> str:
+    """
+    Six-panel figure for the full simulation (all layers active).
+      Row 1: Test accuracy | Cumulative DP-ε | Participation per round
+      Row 2: Stackelberg λ* | Blocked updates per round | Token leaderboard
+    """
+    fl = _load(fl_path)
+    bc = _load(bc_path)
+
+    rounds     = fl["rounds"]
+    accuracies = fl["accuracies"]
+    epsilons   = fl["epsilons"]
+    n_part     = fl["participant_counts"]
+    lambdas    = bc["lambda_stars"]
+    blocked    = bc["blocked_counts"]
+    leaderboard = bc.get("leaderboard", [])
+    balances   = bc.get("final_balances", {})
+
+    bc_rounds = list(range(1, len(lambdas) + 1))
+
+    fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+    fig.suptitle(
+        "COVER Task 3.2 — Full Simulation: FL + DP + Blockchain + Incentive + Security",
+        fontsize=12, fontweight="bold",
+    )
+
+    # ── Accuracy ──────────────────────────────────────────────────────── #
+    ax = axes[0, 0]
+    ax.plot(rounds, accuracies, "b-o", markersize=4, label="DP-FL accuracy")
+    if fl.get("target_accuracy"):
+        ax.axhline(fl["target_accuracy"], color="r", ls="--", lw=1.2,
+                   label=f"Target {fl['target_accuracy']}")
+    if fl.get("convergence_round"):
+        ax.axvline(fl["convergence_round"], color="g", ls=":", lw=1.2,
+                   label=f"Converge @ {fl['convergence_round']}")
+    ax.set_xlabel("Round"); ax.set_ylabel("Test Accuracy")
+    ax.set_title("Global Model Accuracy"); ax.legend(fontsize=8)
+
+    # ── DP-ε ──────────────────────────────────────────────────────────── #
+    ax = axes[0, 1]
+    ax.plot(rounds, epsilons, color="seagreen", marker="o", markersize=4)
+    ax.set_xlabel("Round"); ax.set_ylabel("Cumulative DP-ε")
+    ax.set_title("Privacy Budget (RDP Accountant)")
+
+    # ── Participation ─────────────────────────────────────────────────── #
+    ax = axes[0, 2]
+    w = max(rounds) / len(rounds) * 0.8
+    ax.bar(rounds, n_part, color="steelblue", alpha=0.75, width=w)
+    ax.set_xlabel("Round"); ax.set_ylabel("# Participating UAVs")
+    ax.set_title("Channel-Aware Participation")
+
+    # ── Stackelberg λ* ───────────────────────────────────────────────── #
+    ax = axes[1, 0]
+    ax.plot(bc_rounds, lambdas, color="darkorange", lw=1.8)
+    ax.set_xlabel("Round"); ax.set_ylabel("Optimal reward rate λ*")
+    ax.set_title("Stackelberg Equilibrium λ*")
+
+    # ── Blocked updates ──────────────────────────────────────────────── #
+    ax = axes[1, 1]
+    w2 = max(bc_rounds) / len(bc_rounds) * 0.8
+    ax.bar(bc_rounds, blocked, color="tomato", alpha=0.8, width=w2)
+    ax.set_xlabel("Round"); ax.set_ylabel("Updates blocked")
+    ax.set_title("Byzantine + Free-rider Detections")
+
+    # ── Token leaderboard ─────────────────────────────────────────────── #
+    ax = axes[1, 2]
+    if leaderboard:
+        ids  = [f"UAV {e['uav_id']}" for e in leaderboard[:8]]
+        bals = [e["balance"] for e in leaderboard[:8]]
+        cols = ["gold" if e.get("is_attacker") else "steelblue" for e in leaderboard[:8]]
+    elif balances:
+        top  = sorted(balances.items(), key=lambda x: x[1], reverse=True)[:8]
+        ids  = [f"UAV {k}" for k, _ in top]
+        bals = [v for _, v in top]
+        cols = ["steelblue"] * len(ids)
+    else:
+        ids, bals, cols = [], [], []
+
+    if ids:
+        ax.barh(ids, bals, color=cols, alpha=0.85)
+        ax.invert_yaxis()
+        ax.set_xlabel("Token Balance")
+    ax.set_title("Top-8 UAV Token Leaderboard")
+
+    plt.tight_layout()
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    out = f"{output_dir}/full_simulation_results.pdf"
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    print(f"Saved → {out}")
+    if show:
+        plt.show()
+    plt.close()
+    return out

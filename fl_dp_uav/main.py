@@ -32,7 +32,7 @@ from simulation.runner import SimulationRunner
 from simulation.full_runner import FullSimulationRunner
 from simulation.marl_runner import MARLSimulationRunner
 from marl.trainer import MARLFLTrainer
-from evaluation.metrics import plot_convergence, compare_dp_vs_nodp, privacy_accuracy_tradeoff
+from evaluation.metrics import plot_convergence, compare_dp_vs_nodp, privacy_accuracy_tradeoff, plot_full_results
 from evaluation.marl_plots import plot_marl_results
 
 CONFIG = "config.yaml"
@@ -128,7 +128,11 @@ def main():
     if args.full:
         runner = FullSimulationRunner(args.config)
         runner.run(output_dir=f"{args.output}/full")
-        plot_convergence(f"{args.output}/full/full_results.json", output_dir=f"{args.output}/full")
+        plot_full_results(
+            fl_path=f"{args.output}/full/full_results.json",
+            bc_path=f"{args.output}/full/blockchain_incentive_results.json",
+            output_dir=f"{args.output}/full",
+        )
         return
 
     if args.plot_only:
