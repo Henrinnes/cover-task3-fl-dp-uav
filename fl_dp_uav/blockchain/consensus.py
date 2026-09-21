@@ -35,8 +35,21 @@ class PoAConsensus:
         """Minimum signatures needed to finalise a block."""
         return len(self.validators) // 2 + 1
 
-    def current_proposer(self) -> int:
-        return self.validators[self._epoch % len(self.validators)]
+    def current_proposer(self, exclude: Optional[set] = None) -> Optional[int]:
+        """Next eligible proposer in round-robin order, skipping excluded validators.
+
+        Scanning forward from the current epoch (rather than indexing it
+        directly) keeps a validator that is temporarily excluded — e.g. the
+        round it is caught as Byzantine/free-riding — from being handed the
+        proposer slot it can't fulfil.
+        """
+        exclude = exclude or set()
+        n = len(self.validators)
+        for offset in range(n):
+            candidate = self.validators[(self._epoch + offset) % n]
+            if candidate not in exclude:
+                return candidate
+        return None  # every validator excluded this round
 
     def propose_and_finalise(
         self,
@@ -53,8 +66,10 @@ class PoAConsensus:
 
         Returns the finalised block, or None if quorum not met.
         """
-        proposer_id = self.current_proposer()
         exclude = set(exclude_ids or [])
+        proposer_id = self.current_proposer(exclude)
+        if proposer_id is None:
+            return None  # no eligible proposer this round
 
         # Gather transactions from all validator mempools
         all_txs = []
@@ -88,11 +103,15 @@ class PoAConsensus:
                     sigs_collected += 1
 
         if sigs_collected < self.quorum:
+            self._epoch += 1  # rotate away from a stale/failing proposer
             return None  # consensus failed
 
-        # Append to all honest chains
+        # Append to every replica — including excluded validators' — so no
+        # honest node's local chain falls permanently out of sync with the
+        # canonical chain (exclusion revokes this round's vote/proposal
+        # rights only, not ledger replication).
         for vid in self.validators:
-            if vid not in exclude and vid in chains:
+            if vid in chains:
                 chains[vid].append_block(candidate)
 
         self._epoch += 1

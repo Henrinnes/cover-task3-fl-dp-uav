@@ -7,6 +7,7 @@ __pycache__/
 dist/
 build/
 .eggs/
+.venv/
 
 # Data — datasets are large and auto-downloaded
 fl_dp_uav/data/cifar10/

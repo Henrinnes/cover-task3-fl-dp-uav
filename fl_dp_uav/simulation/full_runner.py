@@ -348,6 +348,7 @@ class FullSimulationRunner(SimulationRunner):
             "final_balances": dict(self.contract.state.token_balances),
             "final_reputations": dict(self.contract.state.reputation_scores),
             "leaderboard": self.contract.leaderboard()[:10],
+            "attacker_ids": sorted(self.byzantine_ids | self.freerider_ids),
         }
         with open(f"{output_dir}/blockchain_incentive_results.json", "w") as f:
             json.dump(extra, f, indent=2)
