@@ -185,15 +185,19 @@ def plot_full_results(
 
     # ── Token leaderboard ─────────────────────────────────────────────── #
     ax = axes[1, 2]
+    attacker_ids = set(bc.get("attacker_ids", []))
     if leaderboard:
-        ids  = [f"UAV {e['uav_id']}" for e in leaderboard[:8]]
-        bals = [e["balance"] for e in leaderboard[:8]]
-        cols = ["gold" if e.get("is_attacker") else "steelblue" for e in leaderboard[:8]]
+        # leaderboard entries are (uav_id, balance) pairs — 2-element lists
+        # once round-tripped through JSON.
+        top = leaderboard[:8]
+        ids  = [f"UAV {e[0]}" for e in top]
+        bals = [e[1] for e in top]
+        cols = ["gold" if e[0] in attacker_ids else "steelblue" for e in top]
     elif balances:
         top  = sorted(balances.items(), key=lambda x: x[1], reverse=True)[:8]
         ids  = [f"UAV {k}" for k, _ in top]
         bals = [v for _, v in top]
-        cols = ["steelblue"] * len(ids)
+        cols = ["gold" if k in attacker_ids else "steelblue" for k, _ in top]
     else:
         ids, bals, cols = [], [], []
 
