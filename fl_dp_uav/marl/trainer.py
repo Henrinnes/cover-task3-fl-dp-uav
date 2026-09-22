@@ -42,11 +42,26 @@ class MARLFLTrainer:
 
         self.env = MARLEnvironment(num_uavs, num_rounds)
 
+        # eps decays once per round per agent, but only once the replay buffer
+        # holds a full batch (`update()` is a no-op before that) — so both the
+        # warm-up length and the decay rate must scale with the configured
+        # round budget, or short runs never decay at all (buffer never fills)
+        # and long runs never reach eps_end (a fixed decay=0.99 leaves
+        # eps~=0.19 after a 200-round run instead of reaching 0.05).
+        eps_start, eps_end = 1.0, 0.05
+        batch_size = min(32, max(8, num_rounds // 4))
+        decay_steps = max(1, num_rounds - batch_size)
+        eps_decay = (eps_end / eps_start) ** (1.0 / decay_steps)
+
         self.agents: List[DQNAgent] = [
             DQNAgent(
                 agent_id=i,
                 state_dim=STATE_DIM,
                 n_actions=len(ACTION_EPOCHS),
+                eps_start=eps_start,
+                eps_end=eps_end,
+                eps_decay=eps_decay,
+                batch_size=batch_size,
                 device=runner.gpu_devices[i % len(runner.gpu_devices)],
             )
             for i in range(num_uavs)
