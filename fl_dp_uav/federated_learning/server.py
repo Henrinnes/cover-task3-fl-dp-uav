@@ -55,3 +55,26 @@ class FLServer:
             n += len(y)
 
         return total_loss / max(n, 1), correct / max(n, 1)
+
+    @torch.no_grad()
+    def evaluate_balanced(self, loader: DataLoader, num_classes: int) -> float:
+        """
+        Balanced accuracy: the mean of per-class recall. Unlike plain accuracy,
+        a model that has learned nothing and always predicts the majority class
+        cannot game this metric on an imbalanced dataset (e.g. AIDER, where
+        'normal' is ~68% of samples and plain accuracy is misleading).
+        """
+        self.model.eval()
+        correct = torch.zeros(num_classes)
+        total = torch.zeros(num_classes)
+
+        for x, y in loader:
+            x, y = x.to(self.device), y.to(self.device)
+            pred = self.model(x).argmax(1)
+            for c in range(num_classes):
+                mask = y == c
+                total[c] += mask.sum().item()
+                correct[c] += (pred[mask] == c).sum().item()
+
+        per_class_recall = correct / total.clamp(min=1)
+        return per_class_recall.mean().item()

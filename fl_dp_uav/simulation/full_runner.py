@@ -142,6 +142,7 @@ class FullSimulationRunner(SimulationRunner):
         self.lambda_stars: List[float] = []
         self.blocked_counts: List[int] = []
         self.token_balances_history: List[Dict[int, float]] = []
+        self.balanced_accuracies: List[float] = []
 
     # ------------------------------------------------------------------
     # Override run()
@@ -295,6 +296,8 @@ class FullSimulationRunner(SimulationRunner):
 
             if rnd % self.log_interval == 0 or rnd == 1:
                 loss, acc = self.server.evaluate(self.test_loader)
+                bal_acc = self.server.evaluate_balanced(self.test_loader, self.num_classes)
+                self.balanced_accuracies.append(bal_acc)
                 eps = (
                     self.accountant.get_epsilon(dp_cfg["target_delta"])
                     if dp_cfg["enabled"]
@@ -307,7 +310,7 @@ class FullSimulationRunner(SimulationRunner):
                     key=lambda x: x[1], reverse=True
                 )[:3]
                 print(
-                    f"  Rnd {rnd:4d} | acc={acc:.4f} | ε={eps:5.2f} | "
+                    f"  Rnd {rnd:4d} | acc={acc:.4f} | bal_acc={bal_acc:.4f} | ε={eps:5.2f} | "
                     f"λ*={lambda_star:.3f} | blocked={len(blocked)} | "
                     f"chain={self.chains[0].height} | "
                     f"top-3 balances={[(i, f'{b:.1f}') for i,b in top_bal]}"
@@ -333,6 +336,8 @@ class FullSimulationRunner(SimulationRunner):
         print("Full Simulation Complete")
         print(f"  Convergence round  : {summary['convergence_round']}")
         print(f"  Final accuracy     : {summary['final_accuracy']:.4f}")
+        if self.balanced_accuracies:
+            print(f"  Final bal. accuracy: {self.balanced_accuracies[-1]:.4f}")
         print(f"  Chain height       : {summary['final_chain_height']}")
         print(f"  Avg blocked/round  : {summary['avg_blocked']:.1f}")
         print(f"  Total rewards dist : {self.contract.state.total_rewards_distributed:.1f} tokens")
@@ -349,6 +354,7 @@ class FullSimulationRunner(SimulationRunner):
             "final_reputations": dict(self.contract.state.reputation_scores),
             "leaderboard": self.contract.leaderboard()[:10],
             "attacker_ids": sorted(self.byzantine_ids | self.freerider_ids),
+            "balanced_accuracies": self.balanced_accuracies,
         }
         with open(f"{output_dir}/blockchain_incentive_results.json", "w") as f:
             json.dump(extra, f, indent=2)

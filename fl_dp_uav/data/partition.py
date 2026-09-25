@@ -9,8 +9,13 @@ cifar10   — auto-downloads via torchvision; standard FL benchmark
 eurosat   — auto-downloads via torchvision; 10-class satellite imagery (64×64)
             Most relevant to COVER: land-cover classification from aerial sensors.
             Classes include River, Forest, Highway, Industrial, Residential, etc.
+aider     — 5-class real UAV disaster imagery (fire, flooded_areas,
+            collapsed_building, traffic_incident, normal); download from
+            https://zenodo.org/record/3888300, extract AIDER.zip into
+            data/aider/ (produces data/aider/AIDER/<class>/*.jpg).
 custom    — point load_dataset() at any folder with ImageFolder-compatible structure
-            (use for FloodNet / AIDER once manually downloaded)
+            (pre-split into train/ and test/ subfolders; use for FloodNet or
+            any other dataset once manually downloaded and split)
 """
 
 import numpy as np
@@ -148,13 +153,57 @@ def load_custom(data_dir: str, img_size: int = 32) -> Tuple[Dataset, Dataset]:
     return train_set, test_set
 
 
+def load_aider(data_dir: str = "./data/aider", img_size: int = 32) -> Tuple[Dataset, Dataset]:
+    """
+    AIDER: Aerial Image dataset for Emergency Response applications.
+    5 classes: fire, flooded_areas, collapsed_building, traffic_incident, normal
+    (heavily imbalanced -- 'normal' is ~68% of the 6433 images). Directly
+    on-task for COVER: real UAV-captured disaster imagery, not a proxy dataset.
+
+    Expects `data_dir` to contain the extracted `AIDER/<class>/*.jpg` folders
+    (download: https://zenodo.org/record/3888300, AIDER.zip, 263MB). No
+    official train/test split is shipped, so we take an 80/20 split here,
+    the same approach as load_eurosat().
+
+    Ref: Kyrkou & Theocharides (2020), "EmergencyNet: Efficient Aerial Image
+         Classification for Drone-Based Emergency Monitoring Using Atrous
+         Convolutional Feature Fusion." IEEE JSTARS.
+    """
+    norm = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+    transform_train = transforms.Compose([
+        transforms.Resize((img_size, img_size)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        norm,
+    ])
+    transform_test = transforms.Compose([
+        transforms.Resize((img_size, img_size)),
+        transforms.ToTensor(),
+        norm,
+    ])
+    root = f"{data_dir}/AIDER"
+    full = datasets.ImageFolder(root, transform=transform_train)
+
+    n = len(full)
+    n_train = int(0.8 * n)
+    indices = torch.randperm(n, generator=torch.Generator().manual_seed(42)).tolist()
+    train_idx, test_idx = indices[:n_train], indices[n_train:]
+
+    train_set = Subset(full, train_idx)
+    test_full = datasets.ImageFolder(root, transform=transform_test)
+    test_set = Subset(test_full, test_idx)
+    return train_set, test_set
+
+
 def load_dataset(name: str, data_dir: str) -> Tuple[Dataset, Dataset]:
-    """Dispatcher. name: 'cifar10' | 'eurosat' | 'custom'"""
+    """Dispatcher. name: 'cifar10' | 'eurosat' | 'aider' | 'custom'"""
     if name == "cifar10":
         return load_cifar10(data_dir)
     elif name == "eurosat":
         return load_eurosat(data_dir)
+    elif name == "aider":
+        return load_aider(data_dir)
     elif name == "custom":
         return load_custom(data_dir)
     else:
-        raise ValueError(f"Unknown dataset: {name}. Choose cifar10 | eurosat | custom")
+        raise ValueError(f"Unknown dataset: {name}. Choose cifar10 | eurosat | aider | custom")

@@ -849,6 +849,81 @@ validation (as the original phrasing of this section did) would have been
 exactly the kind of unverified claim we corrected in
 Section~\ref{sec:dpfl-comparison}.
 
+\subsection{Real UAV Imagery (AIDER): Integration and a Convergence Diagnosis}
+\label{sec:aider}
+
+CIFAR-10 is a standard FL benchmark but not on-task imagery; the original
+future-work list called for validating on real UAV disaster imagery. FloodNet
+was the dataset originally named, but its Track~1 classification labels
+(``Flooded''/``Non-Flooded'') are distributed as an unlabelled Google Drive
+folder with only $\sim$400 labelled images total --- impractical to fetch
+automatically and too small to partition meaningfully across 20 UAVs. AIDER
+(Aerial Image dataset for Emergency Response, Kyrkou \& Theocharides, 2020)
+was used instead: 6433 real UAV images across five classes (fire, flooded
+areas, collapsed buildings, traffic incidents, normal), hosted as a single
+263~MB Zenodo archive with no download friction.
+
+Wiring it in surfaced a real, pre-existing bug: \texttt{simulation/runner.py}
+called \texttt{load\_cifar10()} directly, so the \texttt{eurosat} and
+\texttt{custom} options already documented in \texttt{data/partition.py} and
+the README were dead code, never actually reachable regardless of the
+\texttt{data.dataset} config value. This is now fixed --- \texttt{runner.py}
+calls the \texttt{load\_dataset()} dispatcher, and the model's output layer
+size is inferred from the dataset (\texttt{\_num\_classes()}) rather than
+hardcoded to 10, so \texttt{eurosat} and the new \texttt{aider} option are
+both now actually usable, not just documented.
+
+\paragraph{A misleading-metric finding.} AIDER's \texttt{normal} class is
+68\% of the data. At the CIFAR-tuned hyperparameters (batch size 32), round~1
+reported 68.1\% accuracy and the run auto-declared convergence --- but this
+is an artefact, not learning: a model predicting ``normal'' for everything
+scores $\approx$68\% for free. We added a balanced-accuracy metric
+(\texttt{FLServer.evaluate\_balanced()}, mean per-class recall) that a
+majority-class collapse cannot game, alongside the existing raw accuracy.
+
+\paragraph{A privacy-budget finding.} AIDER's clients hold far fewer samples
+than CIFAR's ($\sim$257 vs.\ $\sim$2500 average per UAV), so the same
+batch size of 32 is a much higher DP-SGD sampling rate, and $\varepsilon$
+reached 9.05 of the 10.0 budget after a single round. Reducing
+\texttt{local\_batch\_size} to 4 brought this under control: $\varepsilon$
+grew from 2.17 (round~1) to 4.64 (round~10), visibly decelerating
+(+0.75 round 1$\to$2, +0.15 round 9$\to$10), which would stay within budget
+over a longer run.
+
+\paragraph{The remaining problem.} Even with both fixes, the model does not
+learn. Table~\ref{tab:aider-diagnosis} shows raw accuracy oscillating wildly
+(8.6\% to 67.5\%) while balanced accuracy stays flat at 15--26\% for all 10
+rounds --- essentially the 20\% chance level for 5 classes, with no upward
+trend. The raw-accuracy swings are the model flipping in and out of a
+majority-class collapse, not genuine progress; balanced accuracy shows there
+is none.
+
+\begin{table}[H]
+  \centering
+  \caption{AIDER, 10-round diagnostic (batch size 4, otherwise identical
+  DP-FL config to Section~8.1).}
+  \label{tab:aider-diagnosis}
+  \begin{tabular}{lcccccc}
+    \toprule
+    Round & 1 & 3 & 5 & 7 & 9 & 10\\
+    \midrule
+    Raw accuracy & 8.6\% & 46.5\% & 66.4\% & 67.5\% & 67.3\% & 28.4\%\\
+    Balanced accuracy & 20.8\% & 25.9\% & 19.7\% & 20.0\% & 19.8\% & 20.8\%\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+This is plausibly a data-scarcity problem compounding with the existing
+Dirichlet non-IID partitioning: with $\sim$257 images per UAV drawn from an
+already-imbalanced 5-class pool, a Dirichlet($\alpha=0.5$) split across 20
+clients can plausibly leave individual clients with few or zero examples of
+the minority disaster classes, on top of DP noise calibrated for a
+differently-shaped dataset. Diagnosing and fixing this properly --- e.g.\
+stratified partitioning that guarantees minority-class coverage per client,
+or class-weighted loss --- is real additional work, not a hyperparameter
+tweak, so we report it here as a diagnosed, scoped problem rather than
+attempting a same-session fix on top of the MobileNetV2 finding above.
+
 %----------------------------------------------------------------------
 \section{Conclusion}
 %----------------------------------------------------------------------
@@ -868,7 +943,10 @@ UAV testbeds.
 (ii)~replace PoRS simulation with SGX-based hardware attestation for deployment;
 (iii)~extend convergence analysis to 3D trajectory optimisation jointly with power
 allocation (WP2 interface);
-(iv)~evaluate on FloodNet aerial imagery for direct emergency-response validation;
+(iv)~implement stratified per-client partitioning (or class-weighted loss) for
+AIDER so training actually converges on real UAV disaster imagery --- the
+integration, balanced-accuracy metric, and diagnosis in Section~8.7 are done;
+convergence itself is not;
 (v)~explore multi-task MARL where agents jointly optimise sensing, routing, and FL
 participation in a unified policy;
 (vi)~re-tune DP-SGD's $(\sigma, C)$ --- or adopt a dimensionality-aware
