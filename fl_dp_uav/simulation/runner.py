@@ -23,9 +23,9 @@ from typing import Dict, List, Tuple
 import numpy as np
 import torch
 import yaml
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
-from data.partition import dirichlet_partition, load_cifar10
+from data.partition import dirichlet_partition, load_dataset
 from differential_privacy.accountant import RDPAccountant
 from federated_learning.client import FLClient
 from federated_learning.convergence import ConvergenceTracker
@@ -43,6 +43,14 @@ def _gpu_devices() -> List[str]:
     if n == 0:
         return ["cpu"]
     return [f"cuda:{i}" for i in range(n)]
+
+
+def _num_classes(dataset) -> int:
+    """Read class count off the underlying torchvision/ImageFolder dataset,
+    unwrapping the Subset that load_eurosat()/load_aider() apply for their
+    manual train/test split."""
+    ds = dataset.dataset if isinstance(dataset, Subset) else dataset
+    return len(ds.classes)
 
 
 class SimulationRunner:
@@ -95,7 +103,8 @@ class SimulationRunner:
             rng=self.rng,
         )
 
-        train_set, test_set = load_cifar10(data_cfg["data_dir"])
+        train_set, test_set = load_dataset(data_cfg["dataset"], data_cfg["data_dir"])
+        self.num_classes = num_classes = _num_classes(train_set)
         # DataLoader for evaluation: pin_memory only useful when device is CUDA
         self.test_loader = DataLoader(
             test_set, batch_size=256, shuffle=False,
@@ -110,9 +119,9 @@ class SimulationRunner:
 
         backbone = cfg.get("model", {}).get("backbone", "simplecnn")
         if backbone == "mobilenetv2":
-            global_model = MobileNetV2CIFAR(num_classes=10)
+            global_model = MobileNetV2CIFAR(num_classes=num_classes)
         elif backbone == "simplecnn":
-            global_model = SimpleCNN(num_classes=10)
+            global_model = SimpleCNN(num_classes=num_classes)
         else:
             raise ValueError(f"Unknown model.backbone: {backbone!r}")
         # Server lives on the primary (GPU 0)
