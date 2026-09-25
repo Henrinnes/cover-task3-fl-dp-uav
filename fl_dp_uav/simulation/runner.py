@@ -31,6 +31,7 @@ from federated_learning.client import FLClient
 from federated_learning.convergence import ConvergenceTracker
 from federated_learning.server import FLServer
 from models.cnn import SimpleCNN
+from models.mobilenet import MobileNetV2CIFAR
 from uav_network.channel import UAVChannel
 from uav_network.mobility import RandomWaypointMobility
 from uav_network.topology import UAVNetwork
@@ -107,7 +108,13 @@ class SimulationRunner:
             rng=self.rng,
         )
 
-        global_model = SimpleCNN(num_classes=10)
+        backbone = cfg.get("model", {}).get("backbone", "simplecnn")
+        if backbone == "mobilenetv2":
+            global_model = MobileNetV2CIFAR(num_classes=10)
+        elif backbone == "simplecnn":
+            global_model = SimpleCNN(num_classes=10)
+        else:
+            raise ValueError(f"Unknown model.backbone: {backbone!r}")
         # Server lives on the primary (GPU 0)
         self.server = FLServer(global_model, device=self.primary_device)
 

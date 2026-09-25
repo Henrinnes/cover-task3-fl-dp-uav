@@ -42,6 +42,12 @@ data:
   data_dir: ./data/cifar10
   dirichlet_alpha: 0.5        # non-IID heterogeneity (lower = more skewed)
 
+model:
+  # Options: simplecnn (~500K params, original proxy model) |
+  #          mobilenetv2 (~2.3M params, GroupNorm; realistic for UAV companion
+  #          computers per Section 8.5's hardware-feasibility discussion)
+  backbone: simplecnn
+
 simulation:
   seed: 42
   num_trials: 3

@@ -787,13 +787,67 @@ per-epoch cost terms and the MARL reward's energy penalty
 (Section~6), not merely swapped in as a drop-in replacement. A mobile-optimised
 backbone --- MobileNetV2/V3 or EfficientNet-Lite~\cite{sandler2018}, using
 depthwise-separable convolutions to hold parameter counts in the 2--5M range
---- is the realistic middle ground: it is what most published UAV/aerial-imagery
-classification work actually deploys onboard, and it would close much of the
-gap in Table~\ref{tab:dpfl-comparison} while staying close to
-\texttt{SimpleCNN}'s compute and energy footprint. This is added as a concrete
-item to the future work below rather than a change made under evaluation
-pressure, since a backbone swap should be re-validated against the full
-privacy--accuracy--energy tradeoff rather than assumed to help.
+--- was identified as the realistic middle ground on compute/energy grounds
+alone. We implemented and validated it (Section~8.6); the result is a
+cautionary one, not the accuracy improvement this paragraph originally
+anticipated.
+
+\subsection{MobileNetV2 Validation: A Negative Result}
+\label{sec:mobilenet-negative}
+
+\texttt{MobileNetV2CIFAR} (\texttt{models/mobilenet.py}) was implemented ---
+GroupNorm throughout in place of BatchNorm for the same \texttt{vmap}
+per-sample-gradient compatibility reason as \texttt{SimpleCNN}
+(Section~7), stem and first stage stride reduced from 2 to 1 for 32$\times$32
+input, 2.24M parameters, confirmed to train correctly end-to-end through the
+DP-SGD \texttt{vmap} pipeline on CUDA. A 30-round validation run (identical
+config to Section~8.1 otherwise: 20 UAVs, $\sigma=1.1$, $C=1.0$) was compared
+against \texttt{SimpleCNN}'s first 30 rounds from the same run family.
+
+\begin{table}[H]
+  \centering
+  \caption{Test accuracy, identical DP-FL config, by backbone.}
+  \label{tab:mobilenet-negative}
+  \begin{tabular}{lcccc}
+    \toprule
+    Backbone & Round 1 & Round 10 & Round 20 & Round 30\\
+    \midrule
+    SimpleCNN (0.62M params) & 16.2\% & 26.9\% & 31.4\% & 33.1\%\\
+    MobileNetV2CIFAR (2.24M params) & 10.0\% & 10.0\% & 9.6\% & 10.6\%\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+MobileNetV2CIFAR does not learn at all under DP-FL at these hyperparameters
+--- its accuracy sits at chance level (10\% on 10 classes) for the entire
+run. This is not an implementation fault: the identical architecture, trained
+centrally with plain SGD and \emph{no} DP noise and \emph{no} federation,
+reaches 32.9\% test accuracy after only 300 minibatch steps (well under one
+epoch), confirming the network learns normally once the DP noise is removed.
+
+The cause is a dimensionality mismatch. DP-SGD adds independent Gaussian
+noise, scaled by $\sigma C$, to \emph{every} parameter each step; the total
+injected noise norm therefore scales with $\sqrt{\text{parameter count}}$,
+while the clipped gradient signal (bounded to norm $C$) does not grow with
+it. The $(\sigma=1.1,\ C=1.0)$ pair was never tuned for a 2.24M-parameter
+model --- it was carried over unchanged from \texttt{SimpleCNN}'s 0.62M
+parameters, roughly a $3.6\times$ increase in dimensionality the noise
+budget was never recalibrated against. Concretely, at $\approx3.6\times$ more
+parameters the injected noise norm is $\approx\sqrt{3.6}\approx1.9\times$
+larger for the same $(\sigma, C)$, which is enough to overwhelm the signal
+from this small, heavily-partitioned per-client dataset (an average of
+$\sim$2500 CIFAR-10 images per UAV, before any DP effect).
+
+This means the future-work item below is not "swap in MobileNetV2" but
+specifically \emph{re-tuning $(\sigma, C)$ --- or adopting a
+dimensionality-aware technique such as per-layer or adaptive clipping ---
+jointly with the backbone}, and re-validating before claiming any accuracy
+benefit. We report this as the honest outcome of the experiment run rather
+than reverting to the untested claim: a backbone swap under this framework's
+DP-SGD implementation is not a drop-in win, and assuming otherwise without
+validation (as the original phrasing of this section did) would have been
+exactly the kind of unverified claim we corrected in
+Section~\ref{sec:dpfl-comparison}.
 
 %----------------------------------------------------------------------
 \section{Conclusion}
@@ -817,10 +871,12 @@ allocation (WP2 interface);
 (iv)~evaluate on FloodNet aerial imagery for direct emergency-response validation;
 (v)~explore multi-task MARL where agents jointly optimise sensing, routing, and FL
 participation in a unified policy;
-(vi)~replace \texttt{SimpleCNN} with a mobile-optimised backbone
-(MobileNetV2/V3 or EfficientNet-Lite), re-validated against the incentive
-layer's energy-cost terms, to close the gap to published DP-FL accuracy
-identified in Section~8.5.
+(vi)~re-tune DP-SGD's $(\sigma, C)$ --- or adopt a dimensionality-aware
+technique such as per-layer or adaptive clipping --- for
+\texttt{MobileNetV2CIFAR}'s parameter count, so the backbone implemented and
+validated in Section~8.6 can actually converge under DP-FL, then re-validate
+against the incentive layer's energy-cost terms before claiming any accuracy
+benefit over \texttt{SimpleCNN}.
 
 \vspace{1em}
 \noindent\textbf{Acknowledgements.}
