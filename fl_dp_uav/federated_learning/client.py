@@ -13,6 +13,7 @@ Requires GroupNorm instead of BatchNorm (no cross-sample statistics).
 import copy
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,6 +34,12 @@ class FLClient:
         max_grad_norm: float = 1.0,
         noise_multiplier: float = 1.1,
         device: str = "cpu",
+        adaptive_clipping: bool = False,
+        target_quantile: float = 0.5,
+        clip_lr: float = 0.2,
+        quantile_noise_multiplier: float = 10.0,
+        clip_min: float = 0.1,
+        clip_max: float = 10.0,
     ):
         self.client_id = client_id
         self.model = copy.deepcopy(model).to(device)
@@ -45,6 +52,46 @@ class FLClient:
         self.noise_multiplier = noise_multiplier
         self.device = device
         self.last_num_steps = 0
+
+        # Adaptive clipping (Andrew et al., 2021, "Differentially Private
+        # Learning with Adaptive Clipping", Theorem 1): track the clip norm
+        # C toward `target_quantile` of the per-sample gradient-norm
+        # distribution instead of leaving it fixed, by releasing a noised
+        # "was this step under the clip threshold" signal *jointly* with the
+        # existing per-step gradient release, riding the same subsampled
+        # query rather than issuing a new one. Theorem 1: one such joint
+        # step, with noise multiplier z_delta on the gradient sum and
+        # quantile_noise_multiplier on the threshold indicator, costs
+        # exactly the same (for accounting) as one plain step at the
+        # nominal noise_multiplier z -- so accumulate() calls in the
+        # runners are unchanged; only the noise actually added here differs.
+        # (An earlier version of this tried releasing the signal once per
+        # round instead, as its own separate Gaussian mechanism -- verified
+        # via the accountant to be badly non-negligible, ~150% eps overhead
+        # at typical settings, because a non-subsampled release gets none of
+        # DP-SGD's usual subsampling amplification. Riding the existing
+        # per-step subsampled query avoids that entirely.)
+        self.adaptive_clipping = adaptive_clipping
+        self.target_quantile = target_quantile
+        self.clip_lr = clip_lr
+        self.quantile_noise_multiplier = quantile_noise_multiplier
+        self.clip_min = clip_min
+        self.clip_max = clip_max
+        self.clip_norm = max_grad_norm
+
+        self.z_delta = noise_multiplier
+        if adaptive_clipping:
+            floor = noise_multiplier / 2.0
+            if quantile_noise_multiplier <= floor:
+                raise ValueError(
+                    f"quantile_noise_multiplier ({quantile_noise_multiplier}) must be "
+                    f"> noise_multiplier/2 ({floor}) for the joint mechanism's noise "
+                    "split to be defined (Theorem 1); increase quantile_noise_multiplier "
+                    "or decrease noise_multiplier."
+                )
+            self.z_delta = (
+                noise_multiplier**-2 - (2 * quantile_noise_multiplier) ** -2
+            ) ** -0.5
 
     @property
     def num_samples(self) -> int:
@@ -152,10 +199,14 @@ class FLClient:
             [g.contiguous().reshape(n, -1) for g in per_sample_grads.values()], dim=1
         )                                                               # [n, D]
         norms = flat_grads.norm(dim=1)                                  # [n]
-        clip_coefs = torch.clamp(self.max_grad_norm / (norms + 1e-8), max=1.0)
+        clip_coefs = torch.clamp(self.clip_norm / (norms + 1e-8), max=1.0)
 
-        # Sum clipped gradients + Gaussian noise, then average over batch
-        sigma = self.noise_multiplier * self.max_grad_norm
+        # Sum clipped gradients + Gaussian noise, then average over batch.
+        # Adaptive clipping uses z_delta (>= noise_multiplier) here instead
+        # of the nominal noise_multiplier directly -- see __init__ and
+        # Theorem 1: the accountant still composes at the nominal value.
+        noise_mult = self.z_delta if self.adaptive_clipping else self.noise_multiplier
+        sigma = noise_mult * self.clip_norm
         optimizer.zero_grad()
         for name, p in model.named_parameters():
             if p.requires_grad:
@@ -165,4 +216,15 @@ class FLClient:
                 p.grad = (clipped_sum + torch.randn_like(clipped_sum) * sigma) / n
 
         optimizer.step()
+
+        if self.adaptive_clipping:
+            # Joint release: the same batch's "under threshold" indicator,
+            # noised with quantile_noise_multiplier and released alongside
+            # the gradient sum above -- riding the same subsampled query
+            # (Theorem 1), not a separate accountant-visible mechanism.
+            b = float((clip_coefs >= 1.0).float().mean().item())
+            b_noisy = b + float(np.random.normal(0.0, self.quantile_noise_multiplier / n))
+            self.clip_norm *= float(np.exp(-self.clip_lr * (b_noisy - self.target_quantile)))
+            self.clip_norm = float(np.clip(self.clip_norm, self.clip_min, self.clip_max))
+
         return float(per_sample_losses.mean().item())
