@@ -101,7 +101,7 @@ class MARLSimulationRunner(FullSimulationRunner):
                     self.accountant.accumulate(
                         noise_multiplier=dp_cfg["noise_multiplier"],
                         sample_rate=self.clients[cid].sample_rate,
-                        num_steps=epochs_chosen[cid],
+                        num_steps=self.clients[cid].last_num_steps,
                     )
             return cid, w, elapsed
 
