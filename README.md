@@ -137,7 +137,7 @@ sized from the dataset instead of hardcoded to 10 classes).
 |---|---|---|---|---|
 | **CIFAR-10** | Standard FL benchmark | ✅ Experiments run (see report) | Automatic |
 | **EuroSAT** | Aerial/satellite land-cover (10 classes, 64×64) | ⚠️ Loader fixed and usable; no experiment run yet | Automatic — set `data.dataset: eurosat` |
-| **AIDER** | Real UAV disaster imagery, 5 classes (fire, flood, collapsed building, traffic incident, normal) | ⚠️ Wired in, diagnosed, **does not yet converge** (data scarcity + class imbalance under Dirichlet partitioning — see report Section 8.7) | [Zenodo](https://zenodo.org/record/3888300), 263MB — set `data.dataset: aider` |
+| **AIDER** | Real UAV disaster imagery, 5 classes (fire, flood, collapsed building, traffic incident, normal) | ⚠️ Stratified partitioning implemented and verified (fixes the zero-class problem, `data.min_per_class`), but **still does not converge** at a correctly-accounted ε≤10 budget — same root cause as CIFAR-10/MobileNetV2: noise needed for real privacy at this cohort size overwhelms the signal (report Section 8.7) | [Zenodo](https://zenodo.org/record/3888300), 263MB — set `data.dataset: aider` |
 | **FloodNet** | UAV flood disaster imagery | ❌ Not used — Track 1 labels are a ~400-image Google Drive folder, impractical to automate and too small to partition across 20 clients | [GitHub](https://github.com/BinaLab/FloodNet-Challenge-EARTHVISION2021) (manual) |
 
 For AIDER: download `AIDER.zip` from the Zenodo link above and extract into
@@ -200,10 +200,15 @@ framework's capabilities and config, not results. It includes:
 - A PoA consensus deadlock found and fixed (Section 8.3), with before/after
   blockchain behaviour
 - An MARL exploration-decay bug found and fixed (Section 8.4)
-- Two further negative results, each with root-cause diagnosis: a
-  MobileNetV2 backbone that doesn't converge under DP-SGD at these
-  hyperparameters (Section 8.6), and AIDER (real UAV disaster imagery) not
-  yet converging due to data scarcity/class imbalance (Section 8.7)
+- Three independent lines of evidence for the same root cause — MobileNetV2
+  doesn't converge under DP-SGD at these hyperparameters (Section 8.6);
+  AIDER's data-scarcity/class-imbalance problem was fixed with stratified
+  partitioning (verified: 9/20 clients with zero examples of some class →
+  0/20), but still doesn't converge at a correctly-accounted ε≤10 budget
+  (Section 8.7). All three point to the same binding constraint: this
+  framework's small UAV cohort (11–20 clients) needs adaptive clipping or
+  larger effective participation before a genuine privacy budget and real
+  learning can coexist — now the lead future-work item
 - A literature comparison against published DP-FL results, built only from
   numbers independently verified against each paper's primary source
   (Section 8.5)
