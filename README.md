@@ -70,11 +70,20 @@ assigned GPU. Aggregation and evaluation run on GPU 0.
 ## Requirements
 
 ```bash
+# x86_64 + CUDA 11.8, e.g. the original 3x GTX 1070 Ti setup:
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 pip install -r fl_dp_uav/requirements.txt
 ```
 
-Python 3.9+, PyTorch ≥ 2.0, CUDA 11.8+ recommended (3× GTX 1070 Ti tested).
+Python 3.9+, PyTorch ≥ 2.0. Two setups have actually been tested:
+- **3× NVIDIA GTX 1070 Ti** (x86_64, 8GB VRAM each, CUDA 11.8) — the setup
+  originally targeted; exercises the multi-GPU round-robin path.
+- **NVIDIA GB10** (DGX Spark-class, aarch64, Grace Blackwell, ~131GB unified
+  memory) — what every result currently in `report/cover_task32_report.pdf`
+  was actually produced on (PyTorch 2.14+cu130; the `cu118` wheel above
+  doesn't target aarch64/Blackwell — install the matching wheel for your
+  platform from [pytorch.org](https://pytorch.org/get-started/locally/)
+  instead). Single-GPU, so the round-robin path wasn't exercised.
 
 ---
 

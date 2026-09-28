@@ -51,10 +51,12 @@ bandwidth-limited wireless channels; and (v)~a \emph{Multi-Agent Reinforcement
 Learning (MARL) agentic framework} in which each UAV independently learns an
 adaptive participation policy via Deep Q-Networks (DQN), with Q-network weights
 periodically federated across agents.  All components are implemented in a Python
-simulation framework supporting multi-GPU parallelism across three NVIDIA GTX 1070 Ti
-GPUs, with DP-SGD accelerated via vectorised per-sample gradients
-(\texttt{torch.func.vmap}).  Evaluation uses CIFAR-10 and EuroSAT as proxies for
-UAV aerial image classification.
+simulation framework with round-robin multi-GPU support; results in this report
+were run on a single NVIDIA GB10 (Grace Blackwell, DGX Spark-class, unified
+memory), with DP-SGD accelerated via vectorised per-sample gradients
+(\texttt{torch.func.vmap}).  Evaluation uses CIFAR-10 as a standard FL benchmark
+and AIDER (real UAV disaster imagery) as an on-task proxy; EuroSAT is wired in
+(Section~7) but not yet evaluated.
 \end{abstract}
 
 \tableofcontents
@@ -492,10 +494,16 @@ Security & Not evaluated & Gradient screened for Byzantine/free-rider \\
 \section{Implementation}
 %----------------------------------------------------------------------
 
-The full framework is implemented in Python using PyTorch~2.0 and comprises 33
-modules across eight packages.  Training is distributed across three NVIDIA
-GeForce GTX~1070~Ti GPUs (8~GB VRAM each) via round-robin client assignment and
-\texttt{ThreadPoolExecutor}-based per-round parallelism.  The complete source
+The full framework is implemented in Python using PyTorch~2.14
+and comprises 31 modules across 11 packages. Client training is
+architected for round-robin multi-GPU assignment and
+\texttt{ThreadPoolExecutor}-based per-round parallelism, but the results in
+this report were produced on a single NVIDIA GB10 GPU (Grace Blackwell,
+DGX Spark-class, $\approx$131~GB unified CPU/GPU memory, aarch64) --- a
+different and considerably more capable machine than the 3$\times$ GTX~1070~Ti
+(8~GB VRAM each, x86\_64) setup originally targeted; the multi-GPU
+round-robin path itself was not exercised for these runs since only one GPU
+was available. The complete source
 code is hosted at:
 \begin{center}
   \url{https://github.com/Henrinnes/cover-task3-fl-dp-uav}
