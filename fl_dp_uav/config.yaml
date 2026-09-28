@@ -44,10 +44,15 @@ power:
   min_snr_db: 5.0             # minimum SNR to participate in a round
 
 data:
-  # Options: cifar10 (auto-download) | eurosat (auto-download, aerial) | custom
+  # Options: cifar10 (auto-download) | eurosat (auto-download, aerial) | aider | custom
   dataset: cifar10
   data_dir: ./data/cifar10
   dirichlet_alpha: 0.5        # non-IID heterogeneity (lower = more skewed)
+  min_per_class: 0            # stratified floor: min examples of EVERY class
+                               # guaranteed per client before Dirichlet skew
+                               # (0 = off/original behaviour). Needed for small,
+                               # class-imbalanced datasets like AIDER -- see
+                               # data/partition.py::dirichlet_partition docstring.
 
 model:
   # Options: simplecnn (~500K params, original proxy model) |
