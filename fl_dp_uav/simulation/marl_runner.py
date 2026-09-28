@@ -98,6 +98,8 @@ class MARLSimulationRunner(FullSimulationRunner):
 
             if dp_cfg["enabled"]:
                 with self._accountant_lock:
+                    # Adaptive clipping (if enabled) rides this same
+                    # per-step subsampled query -- see FLClient.
                     self.accountant.accumulate(
                         noise_multiplier=dp_cfg["noise_multiplier"],
                         sample_rate=self.clients[cid].sample_rate,

@@ -141,6 +141,12 @@ class SimulationRunner:
                 max_grad_norm=dp_cfg["max_grad_norm"],
                 noise_multiplier=dp_cfg["noise_multiplier"],
                 device=self.gpu_devices[i % len(self.gpu_devices)],
+                adaptive_clipping=dp_cfg.get("adaptive_clipping", False),
+                target_quantile=dp_cfg.get("target_quantile", 0.5),
+                clip_lr=dp_cfg.get("clip_lr", 0.2),
+                quantile_noise_multiplier=dp_cfg.get("quantile_noise_multiplier", 3.0),
+                clip_min=dp_cfg.get("clip_min", 0.1),
+                clip_max=dp_cfg.get("clip_max", 10.0),
             )
             for i in range(self.network.num_uavs)
         ]
@@ -189,6 +195,10 @@ class SimulationRunner:
 
             if dp_cfg["enabled"]:
                 with self._accountant_lock:
+                    # Adaptive clipping (if enabled) rides this same
+                    # per-step subsampled query -- Theorem 1 guarantees the
+                    # joint release costs the same as this nominal call, so
+                    # no separate accounting is needed (see FLClient).
                     self.accountant.accumulate(
                         noise_multiplier=dp_cfg["noise_multiplier"],
                         sample_rate=self.clients[cid].sample_rate,
