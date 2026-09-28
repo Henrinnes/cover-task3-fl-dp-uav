@@ -186,7 +186,7 @@ Training stops automatically when $\varepsilon > 10$ (configurable privacy budge
 \subsection{Stackelberg Game Formulation}
 
 We model data sharing as a one-leader, $N$-follower Stackelberg game
-\cite{yang2019,zhan2020}:
+\cite{zhan2020}:
 
 \begin{itemize}
   \item \textbf{Leader} (PS): chooses reward rate $\lambda \geq 0$ per unit effort.
@@ -416,7 +416,7 @@ $\boldsymbol{\theta}_i$ every ten DQN update steps.
 Allowing each UAV to learn its Q-function entirely from its own experience is
 sample-inefficient: a UAV that never had high battery during a high-accuracy round
 may never learn that the corresponding (state, action) pair is valuable.
-Federated Q-learning \cite{zheng2023} addresses this by periodically sharing
+Federated Q-learning addresses this by periodically sharing
 Q-network weights across agents.
 
 Every $K = 10$ FL rounds, the Q-network weights of all \emph{participating}
@@ -1069,98 +1069,6 @@ CentraleSupelec and UESTC.
 
 %----------------------------------------------------------------------
 \bibliographystyle{IEEEtran}
-\begin{thebibliography}{99}
-
-\bibitem{mcmahan2017}
-B.~McMahan, E.~Moore, D.~Ramage, S.~Hampson, and B.~A.~y~Arcas,
-``Communication-efficient learning of deep networks from decentralized data,''
-in \emph{Proc. AISTATS}, 2017.
-
-\bibitem{abadi2016}
-M.~Abadi \emph{et al.}, ``Deep learning with differential privacy,''
-in \emph{Proc. ACM CCS}, 2016.
-
-\bibitem{mironov2017}
-I.~Mironov, ``R\'enyi differential privacy,''
-in \emph{Proc. IEEE CSF}, 2017.
-
-\bibitem{wang2019}
-Y.-X.~Wang \emph{et al.}, ``Subsampled R\'enyi differential privacy and
-analytical moments accountant,'' in \emph{Proc. AISTATS}, 2019.
-
-\bibitem{balle2020}
-B.~Balle, G.~Berrada, and Y.-A.~Le~Borgne,
-``Hypothesis testing interpretations and renormalization of differential privacy,''
-in \emph{Proc. ICML}, 2020.
-
-\bibitem{yang2019}
-Q.~Yang \emph{et al.}, ``Incentive mechanism design for federated learning,''
-\emph{IEEE Trans. Wireless Commun.}, vol.~19, no.~8, 2019.
-
-\bibitem{zhan2020}
-Y.~Zhan \emph{et al.}, ``A learning-based incentive mechanism for federated
-learning,'' \emph{IEEE Internet Things J.}, vol.~7, no.~7, 2020.
-
-\bibitem{blanchard2017}
-P.~Blanchard, E.~M.~El~Mhamdi, R.~Guerraoui, and J.~Stainer,
-``Machine learning with adversaries: Byzantine tolerant gradient descent,''
-in \emph{Proc. NeurIPS}, 2017.
-
-\bibitem{yin2018}
-D.~Yin, Y.~Chen, K.~Ramchandran, and P.~Bartlett,
-``Byzantine-robust distributed learning: Towards optimal statistical rates,''
-in \emph{Proc. ICML}, 2018.
-
-\bibitem{fung2018}
-C.~Fung, C.~J.~M.~Yoon, and I.~Beschastnikh,
-``Mitigating sybils in federated learning poisoning,''
-\emph{arXiv:1808.04866}, 2018.
-
-\bibitem{alhourani2014}
-A.~Al-Hourani, S.~Kandeepan, and A.~Jamalipour,
-``Modeling air-to-ground path loss for low altitude platforms in urban environments,''
-in \emph{Proc. IEEE GLOBECOM}, 2014.
-
-\bibitem{mnih2015}
-V.~Mnih \emph{et al.}, ``Human-level control through deep reinforcement learning,''
-\emph{Nature}, vol.~518, pp.~529--533, 2015.
-
-\bibitem{zheng2023}
-Z.~Zheng, L.~Zhao, J.~Guo, W.~Shi, and C.~Lin,
-``Federated deep reinforcement learning for resource allocation in wireless networks,''
-\emph{IEEE Trans.\ Wireless Commun.}, vol.~22, no.~5, pp.~3382--3396, 2023.
-
-\bibitem{nguyen2021}
-D.~C.~Nguyen \emph{et al.}, ``Federated learning for smart healthcare: A survey,''
-\emph{ACM Comput.\ Surv.}, vol.~55, no.~3, 2021.
-
-\bibitem{shi2023}
-Y.~Shi, K.~Wei, L.~Shen, Y.~Liu, X.~Wang, B.~Yuan, and D.~Tao,
-``Towards the flatter landscape and better generalization in federated
-learning under client-level differential privacy,''
-\emph{arXiv:2305.00873}, 2023.
-
-\bibitem{liu2025}
-J.~Liu, Y.~Tian, F.~Shang, Y.~Liu, H.~Liu, J.~Zhou, and D.~Ding,
-``DP-FedPGN: Finding global flat minima for differentially private federated
-learning via penalizing gradient norm,'' \emph{arXiv:2510.27504}, 2025.
-
-\bibitem{khalaf2024}
-O.~I.~Khalaf, S.~R.~Ashokkumar, S.~Algburi, S.~Anupallavi, D.~Selvaraj,
-M.~S.~Sharif, and W.~Elmedany, ``Federated learning with hybrid differential
-privacy for secure and reliable cross-IoT platform knowledge sharing,''
-\emph{Security and Privacy}, vol.~7, no.~3, e374, 2024.
-
-\bibitem{sandler2018}
-M.~Sandler, A.~Howard, M.~Zhu, A.~Zhmoginov, and L.-C.~Chen,
-``MobileNetV2: Inverted residuals and linear bottlenecks,''
-in \emph{Proc. IEEE CVPR}, 2018.
-
-\bibitem{andrew2021}
-G.~Andrew, O.~Thakkar, H.~B.~McMahan, and S.~Ramaswamy,
-``Differentially private learning with adaptive clipping,''
-in \emph{Proc. NeurIPS}, 2021.
-
-\end{thebibliography}
+\bibliography{references}
 
 \end{document}
