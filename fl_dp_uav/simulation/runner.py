@@ -191,7 +191,7 @@ class SimulationRunner:
                     self.accountant.accumulate(
                         noise_multiplier=dp_cfg["noise_multiplier"],
                         sample_rate=self.clients[cid].sample_rate,
-                        num_steps=self.clients[cid].local_epochs,
+                        num_steps=self.clients[cid].last_num_steps,
                     )
             return cid, w, self.clients[cid].num_samples
 

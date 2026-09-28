@@ -44,6 +44,7 @@ class FLClient:
         self.max_grad_norm = max_grad_norm
         self.noise_multiplier = noise_multiplier
         self.device = device
+        self.last_num_steps = 0
 
     @property
     def num_samples(self) -> int:
@@ -94,6 +95,11 @@ class FLClient:
                 total_steps += 1
 
         avg_loss = total_loss / max(total_steps, 1)
+        # Exposed so callers can pass the TRUE number of DP-SGD steps taken
+        # (epochs * minibatches/epoch) to the privacy accountant -- each call
+        # to _dp_step() is one independent noisy release, so the accountant
+        # must be told the real step count, not the epoch count.
+        self.last_num_steps = total_steps
         return copy.deepcopy(self.model.state_dict()), avg_loss
 
     def _dp_step(
