@@ -125,6 +125,7 @@ Key parameters and their research significance:
 | `dp.noise_multiplier` (σ) | 6.6 | Privacy–accuracy tradeoff: ↑σ = more private, less accurate. Raised from 1.1 — see the privacy-accounting correction above; at this UAV-scale cohort (11 active/round) and step count, σ=6.6 is the minimum needed to keep a 200-round run within ε≤10 once accounted for correctly, and at that noise level accuracy does not rise above chance |
 | `dp.max_grad_norm` (C) | 1.0 | Gradient clipping threshold; bounds sensitivity |
 | `dp.target_epsilon` | 10.0 | Stops training if ε budget exceeded |
+| `dp.adaptive_clipping` | false | Tracks `max_grad_norm` toward the gradient-norm quantile instead of leaving it fixed (Andrew et al., 2021) — implemented, validated, no accuracy improvement at this cohort size (σ itself is the binding constraint, not how well C is tuned) — see report Section 8.8 |
 | `model.backbone` | simplecnn | `simplecnn` (~0.6M params) or `mobilenetv2` (~2.2M params, GroupNorm); the latter does not currently converge under DP-SGD at these hyperparameters — see report Section 8.6 |
 | `data.dirichlet_alpha` | 0.5 | Non-IID degree: ↓α = more heterogeneous UAV data |
 | `channel.rician_k` | 10 dB | A2A channel quality: ↑K = stronger LoS |
@@ -209,31 +210,47 @@ framework's capabilities and config, not results. It includes:
 - A PoA consensus deadlock found and fixed (Section 8.3), with before/after
   blockchain behaviour
 - An MARL exploration-decay bug found and fixed (Section 8.4)
-- Three independent lines of evidence for the same root cause — MobileNetV2
+- Four independent lines of evidence for the same root cause — MobileNetV2
   doesn't converge under DP-SGD at these hyperparameters (Section 8.6);
   AIDER's data-scarcity/class-imbalance problem was fixed with stratified
   partitioning (verified: 9/20 clients with zero examples of some class →
   0/20), but still doesn't converge at a correctly-accounted ε≤10 budget
-  (Section 8.7). All three point to the same binding constraint: this
-  framework's small UAV cohort (11–20 clients) needs adaptive clipping or
-  larger effective participation before a genuine privacy budget and real
-  learning can coexist — now the lead future-work item
+  (Section 8.7); adaptive clipping (Andrew et al., 2021) was implemented
+  and validated — two design mistakes caught and fixed along the way using
+  the accountant/real training rather than assumed (an initial "separate
+  mechanism" design added ~150% ε overhead; the paper's own learning rate
+  destabilised training applied per-minibatch instead of per-round) — and
+  it doesn't move the result either (Section 8.8). All four point to the
+  same binding constraint: this framework's small UAV cohort (11–20
+  clients) needs *more clients per round*, not a better-tuned
+  hyperparameter, before a genuine privacy budget and real learning can
+  coexist — now the lead future-work item, and one this simulation can't
+  self-provide by config change alone
 - A literature comparison against published DP-FL results, built only from
   numbers independently verified against each paper's primary source
   (Section 8.5)
+- The bibliography is now a proper `.bib` file (`report/references.bib`)
+  instead of a manual list — verifying each entry while converting it
+  caught two more unverifiable citations sitting in an older, never-checked
+  part of the report (the same class of issue as an earlier fabricated
+  citation this session already caught and fixed in Section 8.5) plus a
+  couple of wrong venues/years; all fixed
 
 ---
 
 ## References
 
+Full bibliography: [`report/references.bib`](report/references.bib) (15
+entries, each independently verified against its primary source — see the
+note above). Key ones:
+
 1. McMahan et al. (2017), "Communication-Efficient Learning of Deep Networks from Decentralized Data." AISTATS.
 2. Abadi et al. (2016), "Deep Learning with Differential Privacy." CCS.
 3. Mironov (2017), "Rényi Differential Privacy." IEEE CSF.
-4. Wang et al. (2019), "Subsampled Rényi DP and Analytical Moments Accountant." NeurIPS.
-5. Yang et al. (2019), "Incentive Mechanism Design for Federated Learning." IEEE Trans. Wireless Commun.
-6. Blanchard et al. (2017), "Machine Learning with Adversaries: Byzantine Tolerant SGD." NeurIPS.
-7. Yin et al. (2018), "Byzantine-Robust Distributed Learning." ICML.
-8. Fung et al. (2018), "Mitigating Sybils in Federated Learning with FoolsGold." arXiv.
+4. Wang et al. (2019), "Subsampled Rényi DP and Analytical Moments Accountant." AISTATS.
+5. Yin et al. (2018), "Byzantine-Robust Distributed Learning." ICML.
+6. Fung et al. (2018), "Mitigating Sybils in Federated Learning with FoolsGold." arXiv.
+7. Andrew et al. (2021), "Differentially Private Learning with Adaptive Clipping." NeurIPS.
 
 ---
 
