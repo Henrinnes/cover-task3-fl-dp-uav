@@ -968,16 +968,49 @@ is none.
   \end{tabular}
 \end{table}
 
-This is plausibly a data-scarcity problem compounding with the existing
+This was diagnosed as a data-scarcity problem compounding with the existing
 Dirichlet non-IID partitioning: with $\sim$257 images per UAV drawn from an
 already-imbalanced 5-class pool, a Dirichlet($\alpha=0.5$) split across 20
-clients can plausibly leave individual clients with few or zero examples of
-the minority disaster classes, on top of DP noise calibrated for a
-differently-shaped dataset. Diagnosing and fixing this properly --- e.g.\
-stratified partitioning that guarantees minority-class coverage per client,
-or class-weighted loss --- is real additional work, not a hyperparameter
-tweak, so we report it here as a diagnosed, scoped problem rather than
-attempting a same-session fix on top of the MobileNetV2 finding above.
+clients can leave individual clients with few or zero examples of the
+minority disaster classes.
+
+\paragraph{Stratified partitioning: implemented and tested.} We verified
+the diagnosis directly: at $\alpha=0.5$, \textbf{9 of 20 clients had zero
+examples of at least one class}. \texttt{dirichlet\_partition()}
+(\texttt{data/partition.py}) now takes a \texttt{min\_per\_class} floor that
+reserves a minimum count of \emph{every} class for \emph{every} client
+before the Dirichlet-skewed remainder is distributed (default~0, i.e.\ the
+original behaviour, so CIFAR-10's reported results are unaffected). At
+\texttt{min\_per\_class=5}, the zero-class problem is eliminated entirely:
+\textbf{0 of 20 clients} are left without at least one example of every
+class.
+
+\paragraph{Result: necessary, not sufficient.} A 30-round run with the fix
+applied (batch size~4, $\sigma=5.0$ --- found the same way as
+Section~8.1's $\sigma=6.6$, by binary search against the corrected
+accountant for a 30-round budget at AIDER's smaller per-client scale) still
+does not show genuine learning: balanced accuracy is 20.3\% at round~1,
+16.7\% at round~10, 17.8\% at round~20, and 21.2\% at round~30 --- flat
+around the 20\% chance level for 5 classes, no trend, while raw accuracy
+climbs from 7.8\% to 47.4\% over the same rounds (the same majority-class
+drift balanced accuracy exists to catch, not real progress). A shorter
+check at the same batch size but the \emph{original, uncorrected} noise
+level ($\sigma=1.1$) did show balanced accuracy rising (23.9\%
+$\to$ 26.0\% over the first 10 rounds) before the correctly-accounted
+$\varepsilon$ budget was exhausted at round~10 ($\varepsilon=19.3$, almost
+$2\times$ over budget) --- i.e.\ the stratification fix genuinely helps,
+but not enough to survive the noise level a real $\varepsilon\le10$
+guarantee requires at this cohort size.
+
+This is the third independent line of evidence for the same conclusion as
+Sections~8.1 and~8.6: at this framework's UAV-scale cohort (11--20 active
+clients), a correctly-accounted DP-SGD privacy budget of $\varepsilon\le10$
+requires noise that overwhelms the learning signal, regardless of backbone
+(Section~8.6), dataset (this section), or now data-engineering fix
+(stratified partitioning). The binding constraint is not any one of these;
+it is the cohort size itself, which is precisely why Section~9's future
+work leads with adaptive clipping and larger effective participation
+(Section~8.5) rather than further backbone or dataset changes.
 
 %----------------------------------------------------------------------
 \section{Conclusion}
@@ -994,22 +1027,27 @@ The framework is openly available and designed for direct extension to real-worl
 UAV testbeds.
 
 \paragraph{Future work.}
-(i)~Add DP protection to the Q-network federation step for formal policy privacy;
-(ii)~replace PoRS simulation with SGX-based hardware attestation for deployment;
-(iii)~extend convergence analysis to 3D trajectory optimisation jointly with power
+(i)~\textbf{Adaptive clipping and/or larger effective participation.} Three
+independent experiments (Sections~8.1, 8.6, 8.7) converge on the same root
+cause: at this framework's UAV-scale cohort (11--20 active clients), a
+correctly-accounted $\varepsilon\le10$ DP-SGD budget requires noise that
+overwhelms the learning signal, regardless of backbone, dataset, or
+partitioning fixes. This is the binding constraint, and the priority item
+for making any of the CIFAR-10, MobileNetV2, or AIDER results
+practically useful --- via a dimensionality-aware technique such as
+per-layer or adaptive clipping~\cite{andrew2021}, and/or increasing the
+number of clients contributing gradient signal per round, since
+DP-FedAvg-style noise is added once per round and divided by the
+participant count;
+(ii)~Add DP protection to the Q-network federation step for formal policy privacy;
+(iii)~replace PoRS simulation with SGX-based hardware attestation for deployment;
+(iv)~extend convergence analysis to 3D trajectory optimisation jointly with power
 allocation (WP2 interface);
-(iv)~implement stratified per-client partitioning (or class-weighted loss) for
-AIDER so training actually converges on real UAV disaster imagery --- the
-integration, balanced-accuracy metric, and diagnosis in Section~8.7 are done;
-convergence itself is not;
 (v)~explore multi-task MARL where agents jointly optimise sensing, routing, and FL
 participation in a unified policy;
-(vi)~re-tune DP-SGD's $(\sigma, C)$ --- or adopt a dimensionality-aware
-technique such as per-layer or adaptive clipping --- for
-\texttt{MobileNetV2CIFAR}'s parameter count, so the backbone implemented and
-validated in Section~8.6 can actually converge under DP-FL, then re-validate
-against the incentive layer's energy-cost terms before claiming any accuracy
-benefit over \texttt{SimpleCNN}.
+(vi)~class-weighted loss for AIDER, as a complement to the stratified
+partitioning already implemented (Section~8.7), once~(i) makes the noise
+level survivable enough for either to be visible in the result.
 
 \vspace{1em}
 \noindent\textbf{Acknowledgements.}
@@ -1109,6 +1147,11 @@ privacy for secure and reliable cross-IoT platform knowledge sharing,''
 M.~Sandler, A.~Howard, M.~Zhu, A.~Zhmoginov, and L.-C.~Chen,
 ``MobileNetV2: Inverted residuals and linear bottlenecks,''
 in \emph{Proc. IEEE CVPR}, 2018.
+
+\bibitem{andrew2021}
+G.~Andrew, O.~Thakkar, H.~B.~McMahan, and S.~Ramaswamy,
+``Differentially private learning with adaptive clipping,''
+in \emph{Proc. NeurIPS}, 2021.
 
 \end{thebibliography}
 
