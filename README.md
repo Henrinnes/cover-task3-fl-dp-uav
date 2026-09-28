@@ -8,6 +8,23 @@
 
 ---
 
+## ⚠️ Privacy-accounting correction
+
+An earlier version of this codebase **undercounted the true DP-SGD step count**
+fed to the RDP accountant (it was credited with the local *epoch* count, not
+the actual number of noisy minibatch steps — roughly 78× fewer than really
+taken for a typical CIFAR-10 client). This meant the reported ε values
+understated the true privacy cost by roughly 20–30×. It's fixed now
+(`federated_learning/client.py` + the three `accumulate()` call sites in
+`simulation/`), and `config.yaml`'s default `noise_multiplier` is raised from
+1.1 to 6.6 — the minimum value that keeps a 200-round run within the
+ε≤10 budget once accounted for correctly. At that noise level, **the model
+does not learn** on CIFAR-10 (9.98% accuracy — chance level for 10 classes).
+See `report/cover_task32_report.pdf` (Section 8, "Correction" box) for the
+full writeup, including the diagnostic numbers that led to the fix.
+
+---
+
 ## Project Overview
 
 The [COVER project](https://trimis.ec.europa.eu/project/cooperative-and-intelligent-unmanned-aerial-vehicles-emergency-response-applications)
@@ -37,7 +54,7 @@ fl_dp_uav/
 ├── security/             Sybil/Byzantine/free-rider attacks + FoolsGold/median defences
 ├── marl/                 DQN agents, federated Q-learning, MARL environment + trainer
 ├── models/               SimpleCNN (GroupNorm, 32×32 RGB, proxy for aerial classification)
-├── data/                 CIFAR-10 & EuroSAT loaders, Dirichlet non-IID partitioning
+├── data/                 CIFAR-10, EuroSAT & AIDER loaders, Dirichlet non-IID partitioning
 ├── simulation/           SimulationRunner, FullSimulationRunner, MARLSimulationRunner
 └── evaluation/           Convergence plots, DP vs no-DP, privacy–accuracy Pareto, MARL plots
 ```
@@ -96,9 +113,10 @@ Key parameters and their research significance:
 | Parameter | Default | Effect |
 |---|---|---|
 | `fl.num_rounds` | 200 | Communication rounds budget |
-| `dp.noise_multiplier` (σ) | 1.1 | Privacy–accuracy tradeoff: ↑σ = more private, less accurate |
+| `dp.noise_multiplier` (σ) | 6.6 | Privacy–accuracy tradeoff: ↑σ = more private, less accurate. Raised from 1.1 — see the privacy-accounting correction above; at this UAV-scale cohort (11 active/round) and step count, σ=6.6 is the minimum needed to keep a 200-round run within ε≤10 once accounted for correctly, and at that noise level accuracy does not rise above chance |
 | `dp.max_grad_norm` (C) | 1.0 | Gradient clipping threshold; bounds sensitivity |
 | `dp.target_epsilon` | 10.0 | Stops training if ε budget exceeded |
+| `model.backbone` | simplecnn | `simplecnn` (~0.6M params) or `mobilenetv2` (~2.2M params, GroupNorm); the latter does not currently converge under DP-SGD at these hyperparameters — see report Section 8.6 |
 | `data.dirichlet_alpha` | 0.5 | Non-IID degree: ↓α = more heterogeneous UAV data |
 | `channel.rician_k` | 10 dB | A2A channel quality: ↑K = stronger LoS |
 | `power.min_snr_db` | 5 dB | Minimum SNR for UAV to participate |
@@ -110,14 +128,24 @@ Key parameters and their research significance:
 
 ## Datasets
 
-| Dataset | Relevance | Download |
-|---|---|---|
-| **CIFAR-10** | Standard FL benchmark | Automatic |
-| **EuroSAT** | Aerial/satellite land-cover (10 classes, 64×64) | Automatic — change `data.dataset: eurosat` |
-| **FloodNet** | UAV flood disaster imagery (directly on-task) | [GitHub](https://github.com/BinaLab/FloodNet-Challenge-EARTHVISION2021) |
-| **AIDER** | Aerial fire/flood/collapse classification | [GitHub](https://github.com/ckyrkou/AIDER) |
+`runner.py` previously called the CIFAR-10 loader directly regardless of
+`data.dataset`, so `eurosat`/`custom` were dead code — fixed this session
+(now dispatches via `data.load_dataset()`, with the model's output layer
+sized from the dataset instead of hardcoded to 10 classes).
 
-For FloodNet/AIDER: place under `data/<name>/train/` and `test/`, then set `data.dataset: custom`.
+| Dataset | Relevance | Status | Download |
+|---|---|---|---|---|
+| **CIFAR-10** | Standard FL benchmark | ✅ Experiments run (see report) | Automatic |
+| **EuroSAT** | Aerial/satellite land-cover (10 classes, 64×64) | ⚠️ Loader fixed and usable; no experiment run yet | Automatic — set `data.dataset: eurosat` |
+| **AIDER** | Real UAV disaster imagery, 5 classes (fire, flood, collapsed building, traffic incident, normal) | ⚠️ Wired in, diagnosed, **does not yet converge** (data scarcity + class imbalance under Dirichlet partitioning — see report Section 8.7) | [Zenodo](https://zenodo.org/record/3888300), 263MB — set `data.dataset: aider` |
+| **FloodNet** | UAV flood disaster imagery | ❌ Not used — Track 1 labels are a ~400-image Google Drive folder, impractical to automate and too small to partition across 20 clients | [GitHub](https://github.com/BinaLab/FloodNet-Challenge-EARTHVISION2021) (manual) |
+
+For AIDER: download `AIDER.zip` from the Zenodo link above and extract into
+`data/aider/`, producing `data/aider/AIDER/<class>/*.jpg`.
+
+For any other ImageFolder-style dataset (including FloodNet, if you do your
+own train/test split): place under `data/<name>/train/` and `test/`, then set
+`data.dataset: custom`.
 
 ---
 
@@ -156,6 +184,29 @@ free-riders automatically.
 - **Byzantine**: Z-score norm outlier + cosine deviation from mean
 - **Free-rider**: Gradient norm threshold + inter-round staleness check
 - **Robust aggregation**: coordinate-wise median or trimmed mean
+
+---
+
+## Full Report & Results
+
+[`report/cover_task32_report.pdf`](report/cover_task32_report.pdf) is the
+source of truth for actual experimental numbers, figures, and honest
+writeups of what worked and what didn't — this README describes the
+framework's capabilities and config, not results. It includes:
+
+- The privacy-accounting correction (Section 8, "Correction" box) and the
+  real CIFAR-10 outcome under a genuinely correct ε≤10 budget (9.98%
+  accuracy — chance level)
+- A PoA consensus deadlock found and fixed (Section 8.3), with before/after
+  blockchain behaviour
+- An MARL exploration-decay bug found and fixed (Section 8.4)
+- Two further negative results, each with root-cause diagnosis: a
+  MobileNetV2 backbone that doesn't converge under DP-SGD at these
+  hyperparameters (Section 8.6), and AIDER (real UAV disaster imagery) not
+  yet converging due to data scarcity/class imbalance (Section 8.7)
+- A literature comparison against published DP-FL results, built only from
+  numbers independently verified against each paper's primary source
+  (Section 8.5)
 
 ---
 
