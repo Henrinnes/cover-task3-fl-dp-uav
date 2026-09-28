@@ -1014,11 +1014,58 @@ This is the third independent line of evidence for the same conclusion as
 Sections~8.1 and~8.6: at this framework's UAV-scale cohort (11--20 active
 clients), a correctly-accounted DP-SGD privacy budget of $\varepsilon\le10$
 requires noise that overwhelms the learning signal, regardless of backbone
-(Section~8.6), dataset (this section), or now data-engineering fix
-(stratified partitioning). The binding constraint is not any one of these;
-it is the cohort size itself, which is precisely why Section~9's future
-work leads with adaptive clipping and larger effective participation
-(Section~8.5) rather than further backbone or dataset changes.
+(Section~8.6), dataset (this section), or data-engineering fix (stratified
+partitioning). The binding constraint is not any one of these; it is the
+cohort size itself. Section~8.8 tests the most direct candidate fix ---
+adaptive clipping --- against this same conclusion.
+
+\subsection{Adaptive Clipping: Implemented, Validated, Still Insufficient}
+\label{sec:adaptive-clipping}
+
+Adaptive clipping~\cite{andrew2021} tracks the DP-SGD clip norm $C$ toward
+a target quantile of the gradient-norm distribution instead of leaving it
+fixed, so a noise budget calibrated for $\sigma$ is not wasted clipping
+away signal at a poorly-matched $C$. We implemented it as the joint
+per-step mechanism the paper's Theorem~1 describes: each minibatch's
+"was this gradient under the clip threshold" bit is noised and released
+alongside the existing gradient-sum noise, riding the same subsampled
+query rather than issuing a separate one, so the accountant still composes
+at the nominal noise multiplier with no extra privacy cost --- confirmed
+directly rather than assumed: an initial design that instead released the
+signal once per round, as its own independent (non-subsampled) mechanism,
+was checked against \texttt{RDPAccountant} and found to add
+$\approx$150\% $\varepsilon$ overhead, exactly because a non-subsampled
+release gets none of DP-SGD's usual subsampling amplification.
+
+Getting a stable update rate took a second correction. The paper's own
+default learning rate ($\eta_C=0.2$) updates $C$ once per \emph{round},
+aggregated over $\sim$100 clients --- good signal-to-noise ratio per
+update. Applying the same rate once per \emph{minibatch} (this framework's
+granularity; $\sim$390 updates/round for a typical CIFAR-10 client) let
+per-step noise dominate: $C$ hit its ceiling within the first round and
+training diverged. Reducing $\eta_C$ to 0.001 lets $\sim$390 noisy
+per-step nudges average out over a round instead of any single one
+dominating, and was confirmed stable against the fixed-clipping baseline
+on real CIFAR-10 data before being used in a full run.
+
+\paragraph{Result.} A 30-round CIFAR-10 validation (otherwise identical to
+Section~8.1's corrected configuration, $\sigma=6.6$) shows no improvement:
+8.3\%, 9.9\%, 12.8\%, 10.1\% at rounds 1/10/20/30, against the
+fixed-clipping baseline's 9.5\%, 10.3\%, 10.9\%, 11.3\% at the same rounds
+--- both oscillating in the same chance-level band, neither trending up.
+This is consistent with, rather than a failure of, the diagnosis in
+Sections~8.1, 8.6, and~8.7: adaptive clipping improves how well $C$
+matches the gradient distribution, which helps avoid wasting signal to
+clipping, but does not change $\sigma$ itself --- and $\sigma=6.6$ is the
+noise level a genuine $\varepsilon\le10$ guarantee requires at this
+cohort size regardless of how well $C$ is calibrated. A better-matched
+clip norm cannot rescue a signal already destroyed by the noise added on
+top of it. This narrows the actual fix to the other half of the future-work
+item below: more clients contributing gradient signal per round, since
+DP-FedAvg-style noise is added once per round and divided by the
+participant count (Section~\ref{sec:dpfl-comparison}) --- a fix this
+UAV-scale simulation cannot self-provide by re-tuning any single
+hyperparameter.
 
 %----------------------------------------------------------------------
 \section{Conclusion}
@@ -1035,18 +1082,19 @@ The framework is openly available and designed for direct extension to real-worl
 UAV testbeds.
 
 \paragraph{Future work.}
-(i)~\textbf{Adaptive clipping and/or larger effective participation.} Three
-independent experiments (Sections~8.1, 8.6, 8.7) converge on the same root
-cause: at this framework's UAV-scale cohort (11--20 active clients), a
-correctly-accounted $\varepsilon\le10$ DP-SGD budget requires noise that
-overwhelms the learning signal, regardless of backbone, dataset, or
-partitioning fixes. This is the binding constraint, and the priority item
-for making any of the CIFAR-10, MobileNetV2, or AIDER results
-practically useful --- via a dimensionality-aware technique such as
-per-layer or adaptive clipping~\cite{andrew2021}, and/or increasing the
+(i)~\textbf{Larger effective participation.} Four independent experiments
+now converge on the same root cause (Sections~8.1, 8.6, 8.7, 8.8): at this
+framework's UAV-scale cohort (11--20 active clients), a correctly-accounted
+$\varepsilon\le10$ DP-SGD budget requires noise that overwhelms the
+learning signal, regardless of backbone, dataset, partitioning, or clip-norm
+calibration. Adaptive clipping~\cite{andrew2021} was implemented and tested
+specifically to address this (Section~8.8) and did not move the result,
+which narrows rather than widens the remaining option: increasing the
 number of clients contributing gradient signal per round, since
 DP-FedAvg-style noise is added once per round and divided by the
-participant count;
+participant count (Section~\ref{sec:dpfl-comparison}) --- something this
+simulation would need a larger UAV fleet, not a hyperparameter change, to
+test;
 (ii)~Add DP protection to the Q-network federation step for formal policy privacy;
 (iii)~replace PoRS simulation with SGX-based hardware attestation for deployment;
 (iv)~extend convergence analysis to 3D trajectory optimisation jointly with power
