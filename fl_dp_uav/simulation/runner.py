@@ -115,6 +115,7 @@ class SimulationRunner:
             num_clients=self.network.num_uavs,
             alpha=data_cfg["dirichlet_alpha"],
             rng=self.rng,
+            min_per_class=data_cfg.get("min_per_class", 0),
         )
 
         backbone = cfg.get("model", {}).get("backbone", "simplecnn")

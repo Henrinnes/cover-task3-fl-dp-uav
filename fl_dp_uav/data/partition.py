@@ -51,11 +51,23 @@ def dirichlet_partition(
     alpha: float,
     rng: np.random.Generator,
     min_samples: int = 10,
+    min_per_class: int = 0,
 ) -> List[Subset]:
     """
     Partition dataset into `num_clients` non-IID subsets.
     Each class is split according to a Dirichlet(alpha) draw.
     Lower alpha → fewer classes per client (more heterogeneous).
+
+    `min_per_class` (stratified floor): guarantees every client receives at
+    least this many examples of *every* class before the Dirichlet-skewed
+    remainder is distributed, capped at what the class can evenly supply.
+    Without this, a low alpha combined with a small and/or class-imbalanced
+    dataset (e.g. AIDER: 5 classes, ~400-500 images each bar the majority
+    class, over 20 clients) routinely truncates a client's share of a class
+    to exactly zero -- 9/20 clients had zero examples of at least one class
+    at alpha=0.5 on AIDER before this floor was added, which is enough on
+    its own to prevent convergence regardless of DP noise or model choice.
+    Default 0 preserves the original (non-stratified) behaviour exactly.
     """
     labels = np.array([dataset[i][1] for i in range(len(dataset))])
     num_classes = int(labels.max()) + 1
@@ -65,6 +77,14 @@ def dirichlet_partition(
     for c in range(num_classes):
         c_idx = np.where(labels == c)[0]
         rng.shuffle(c_idx)
+
+        floor_n = min(min_per_class, len(c_idx) // num_clients)
+        if floor_n > 0:
+            for cid in range(num_clients):
+                client_indices[cid].extend(
+                    c_idx[cid * floor_n : (cid + 1) * floor_n].tolist()
+                )
+            c_idx = c_idx[floor_n * num_clients :]
 
         proportions = rng.dirichlet(np.full(num_clients, alpha))
         counts = (proportions * len(c_idx)).astype(int)
