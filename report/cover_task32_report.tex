@@ -516,7 +516,7 @@ $E$ & 5 & Default local epochs per round \\
 $B$ & 32 & Local batch size \\
 $\eta$ & 0.01 & SGD learning rate \\
 $C$ & 1.0 & Gradient clipping norm \\
-$\sigma$ & 1.1 & DP noise multiplier \\
+$\sigma$ & 6.6 & DP noise multiplier (Section~8's correction) \\
 $\delta$ & $10^{-5}$ & DP delta \\
 $\alpha_{\mathrm{Dir}}$ & 0.5 & Dirichlet heterogeneity \\
 $f$ & 5.8 GHz & Carrier frequency \\
@@ -543,31 +543,66 @@ Hidden & 64 & Q-network hidden layer width \\
 \section{Results}
 %----------------------------------------------------------------------
 
+\begin{quote}
+\noindent\textbf{Correction.} An earlier version of this report claimed
+$\varepsilon = 5.93$ after 200 rounds at $\sigma = 1.1$ (Section~8.1), and
+smaller $\varepsilon$ figures throughout Sections~8.4--8.7. These were
+computed by an RDP accountant credited with the local \emph{epoch} count as
+the number of DP-SGD steps, when each client actually takes one independent
+noisy gradient step per \emph{minibatch} --- roughly 78$\times$ more steps
+per epoch than credited for a typical CIFAR-10 client
+(\texttt{federated\_learning/client.py}; fixed, along with the three call
+sites that fed it, across \texttt{runner.py}, \texttt{full\_runner.py}, and
+\texttt{marl\_runner.py}). The true $\varepsilon$ for the original
+$\sigma=1.1$, 200-round run is $\approx$191 --- about 20--30$\times$ over the
+$\varepsilon_{\max}=10$ budget this report frames as having headroom to
+spare, and enough to exhaust the budget within 3--4 rounds, not 200, had it
+been checked correctly. Section~8.1 below is re-run with the noise
+multiplier corrected to $\sigma = 6.6$ (the minimum value, found by binary
+search against the fixed accountant, that keeps a 200-round run within
+budget at the existing batch size and local-epoch count) and reports the
+real outcome. The $\varepsilon$ figures quoted in Sections~8.4, 8.6, and 8.7
+predate this fix and understate the true privacy cost of those specific
+runs by a similar order of magnitude; the non-privacy-budget findings in
+those sections (MARL behaviour, the MobileNetV2 and AIDER convergence
+diagnoses) do not depend on the accountant and are unaffected, since the
+noise physically added during training was always drawn using the
+configured $\sigma$ directly, never derived from the accountant --- only
+the \emph{reported} $\varepsilon$ was wrong, not what was actually run.
+\end{quote}
+
 \subsection{Convergence Under Differential Privacy}
 
 The simulation tracks test accuracy and cumulative privacy budget $\varepsilon$
-per FL round.  With noise multiplier $\sigma = 1.1$, 20 UAVs (channel-eligibility
+per FL round. With the corrected accountant, 20 UAVs (channel-eligibility
 limits active participants to 11/20 per round under $\gamma_{\min}=5$~dB), and
-$C = 1.0$ gradient clipping, a 200-round run on CIFAR-10 reaches \textbf{41.35\%}
-test accuracy while consuming $\varepsilon = 5.93$ of the $\varepsilon_{\max}=10$
-privacy budget --- i.e.\ the run stays within budget with headroom to spare, but
-does not reach the 65\% target accuracy within 200 rounds
-(\texttt{convergence\_round} is unset). Section~\ref{sec:dpfl-comparison} compares
-this result to published DP-FL benchmarks on CIFAR-10 and discusses the factors
-behind the gap.
+$C = 1.0$ gradient clipping, keeping a 200-round run within
+$\varepsilon_{\max}=10$ requires $\sigma = 6.6$ --- roughly $6\times$ the
+noise used (and misreported as fitting the same budget) before the fix.
+At this noise level the model does not learn: final test accuracy is
+\textbf{9.98\%}, against a 10\% chance baseline for CIFAR-10's ten classes.
+Accuracy oscillates in a narrow band (7.6--13.1\%, mean 10.3\%, s.d.\ 1.2\%)
+for the entire run with no upward trend --- noise around the chance level,
+not a plateau reached after real learning, and nowhere near the 65\% target
+(\texttt{convergence\_round} is unset). Final $\varepsilon = 5.88$, within
+budget. Section~\ref{sec:dpfl-comparison} compares this outcome to published
+DP-FL benchmarks and discusses why: those benchmarks were never subject to
+this accounting error and were tuned for their own (correctly-accounted)
+privacy budgets, which is a materially different exercise from what this
+run demonstrates.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{accuracy_epsilon_tradeoff.pdf}
   \caption{%
-    Test accuracy (top) and cumulative privacy budget $\varepsilon$ (bottom)
-    over the same 200 communication rounds, sharing a round axis for direct
-    comparison. Accuracy rises quickly over the first $\sim$50 rounds then
-    plateaus around 40\%, while $\varepsilon$ grows in near-lockstep with round
-    count since participation is roughly constant (11/20 UAVs) --- the model's
-    gains front-load early in training while the privacy cost accrues at a
-    steady rate, so the marginal accuracy return per unit of $\varepsilon$
-    spent falls sharply after round $\sim$50.
+    Test accuracy (top) and cumulative privacy budget $\varepsilon$ (bottom,
+    corrected accountant) over the same 200 communication rounds, sharing a
+    round axis. Accuracy never departs from the chance-level band around
+    10\% (dotted line) while $\varepsilon$ climbs steadily toward the
+    $\varepsilon_{\max}=10$ budget --- privacy cost accrues throughout the
+    run while no learning signal survives the noise needed to stay within
+    that budget at this UAV-scale cohort (11 active clients/round) and
+    step count.
   }
   \label{fig:acc-eps-tradeoff}
 \end{figure}
@@ -709,8 +744,12 @@ visibly firming up into a consistent behaviour shortly after $\varepsilon$-greed
 crosses below $\sim$0.15, rather than staying close to random for the whole run.
 
 \paragraph{Privacy budget.}
-The cumulative DP-$\varepsilon$ grows from 1.47 after round~1 to 3.30 after
-round~30, well within the configured budget of $\varepsilon_{\max} = 10$. The
+\emph{(These $\varepsilon$ figures predate the accounting fix described at
+the start of Section~8 and understate the true privacy cost by roughly the
+same order of magnitude found there; the participation/reward findings
+above do not depend on them.)} The cumulative DP-$\varepsilon$ grows from
+1.47 after round~1 to 3.30 after round~30, well within the configured budget
+of $\varepsilon_{\max} = 10$. The
 growth rate visibly slows during the low-participation rounds (13--17) and
 steepens once participation locks near 95\% post-round~21, confirming that
 the MARL-driven participation variability translates directly into a variable
@@ -719,20 +758,19 @@ privacy expenditure rate --- a property unavailable in static FL scheduling.
 \subsection{Comparison to Published DP-FL Results on CIFAR-10}
 \label{sec:dpfl-comparison}
 
-Table~\ref{tab:dpfl-comparison} places the 41.35\% accuracy from
-Section~8.1 against client-level DP-FL results on CIFAR-10 reported in two
-recent papers, reading the exact figures directly from their results tables
-rather than from a secondary summary. The published numbers are higher,
-though the gap is narrower than headline DP-FL numbers elsewhere in the
-literature might suggest once the comparison is restricted to numbers that
-can be verified against a primary source under a comparable non-IID setting.
+Table~\ref{tab:dpfl-comparison} places the corrected \textbf{9.98\%} accuracy
+from Section~8.1 against client-level DP-FL results on CIFAR-10 reported in
+two recent papers, reading the exact figures directly from their results
+tables rather than from a secondary summary. The gap is now large, and for a
+specific, identified reason rather than the modest capacity/scale
+differences this section originally proposed.
 
 \begin{table}[H]
   \centering
   \caption{Published client-level DP-FL results on CIFAR-10 vs.\ this
   framework. DP-FedSAM: 300 rounds, 500 clients. DP-FedPGN: rounds/clients
   not extracted from the source table. This work: 200 rounds, 20 UAVs
-  (11 channel-eligible/round).}
+  (11 channel-eligible/round), $\sigma=6.6$ (corrected accounting).}
   \label{tab:dpfl-comparison}
   \begin{tabular}{lccc}
     \toprule
@@ -741,7 +779,7 @@ can be verified against a primary source under a comparable non-IID setting.
     DP-FedSAM~\cite{shi2023} & ResNet-18 & Dirichlet-0.3 non-IID & 53.9\%\\
     DP-FedSAM~\cite{shi2023} & ResNet-18 & IID & 55.6\%\\
     DP-FedPGN~\cite{liu2025} & GNResNet-10 & Dirichlet-0.1 non-IID & 58.2\%\\
-    \textbf{This work} & SimpleCNN & Dirichlet-0.5 non-IID, $\varepsilon=5.93$ & \textbf{41.4\%}\\
+    \textbf{This work} & SimpleCNN & Dirichlet-0.5 non-IID, $\varepsilon=5.88$ & \textbf{10.0\%}\\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -753,11 +791,19 @@ unable to independently verify one against the primary source at the time of
 writing, and note it only as a qualitatively different approach worth
 tracking rather than a directly comparable number.
 
-Two factors, both a direct consequence of the UAV deployment setting rather
-than an implementation gap, account for most of the remaining difference
-(the pipeline already applies standard CIFAR-10 augmentation --- random crop
-with 4px padding and horizontal flip, in \texttt{data/partition.py} --- so
-that is not a contributing factor):
+The dominant factor is the one identified in Section~8.1: reaching this
+framework's UAV-scale cohort (11 active clients/round) through a genuine
+$\varepsilon\le10$ budget over 200 rounds requires $\sigma=6.6$, noise high
+enough to erase the learning signal entirely. We cannot directly attribute
+the published papers' higher accuracy to a specific $\sigma$ they used,
+since their tables (like ours previously) report accuracy at a setting
+rather than the exact noise level achieving it --- but their much larger
+client pools (DP-FedSAM: 500 vs.\ our 11/round) mechanically permit a
+smaller effective per-round noise contribution for the same target
+$\varepsilon$, since DP-FedAvg-style noise is added once per round and
+divided by the participant count (Section~8.6 already used this relation
+for the adaptive-clipping scoping work). Two secondary factors, unchanged
+from the original analysis, remain real but are no longer the primary story:
 
 \begin{enumerate}
   \item \textbf{Model capacity.} \texttt{SimpleCNN} is a deliberately lightweight
@@ -770,6 +816,10 @@ that is not a contributing factor):
   contributing gradient signal per round, on a smaller and more non-IID
   effective cohort, on top of fewer rounds overall.
 \end{enumerate}
+
+(The pipeline already applies standard CIFAR-10 augmentation --- random crop
+with 4px padding and horizontal flip, in \texttt{data/partition.py} --- so
+that is not a contributing factor.)
 
 \paragraph{Backbone choice under UAV hardware constraints.} Whether the
 higher-accuracy backbones above are actually flyable is a separate question
@@ -884,11 +934,16 @@ majority-class collapse cannot game, alongside the existing raw accuracy.
 \paragraph{A privacy-budget finding.} AIDER's clients hold far fewer samples
 than CIFAR's ($\sim$257 vs.\ $\sim$2500 average per UAV), so the same
 batch size of 32 is a much higher DP-SGD sampling rate, and $\varepsilon$
-reached 9.05 of the 10.0 budget after a single round. Reducing
-\texttt{local\_batch\_size} to 4 brought this under control: $\varepsilon$
-grew from 2.17 (round~1) to 4.64 (round~10), visibly decelerating
-(+0.75 round 1$\to$2, +0.15 round 9$\to$10), which would stay within budget
-over a longer run.
+reached 9.05 of the 10.0 budget after a single round --- reducing
+\texttt{local\_batch\_size} to 4 brought this qualitative problem under
+control (batch 32 exhausted the budget almost immediately; batch 4 did
+not). The specific $\varepsilon$ figures quoted for this diagnostic run
+(2.17 at round~1, growing to 4.64 by round~10) predate the accounting fix
+in Section~8 and understate the true cost by roughly the same order of
+magnitude documented there; the qualitative finding --- smaller batches
+reduce sampling-rate-driven budget exhaustion --- is unaffected, since it
+compares two runs under the \emph{same} (buggy, at the time) accounting,
+not an absolute number.
 
 \paragraph{The remaining problem.} Even with both fixes, the model does not
 learn. Table~\ref{tab:aider-diagnosis} shows raw accuracy oscillating wildly
