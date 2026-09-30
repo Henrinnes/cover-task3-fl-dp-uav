@@ -114,3 +114,20 @@ class RDPAccountant:
 
     def reset(self):
         self._history.clear()
+
+
+def max_client_epsilon(accountants: "dict[int, RDPAccountant]", delta: float) -> float:
+    """
+    Worst-case (binding) epsilon across a population of per-client
+    accountants -- NOT their sum. Each client's privacy loss depends only
+    on what's revealed about their own data, so accountants must not be
+    pooled into one shared running total (that makes epsilon grow with
+    population size for reasons unrelated to any individual client's
+    actual privacy cost); the population-level guarantee is set by
+    whichever client has spent the most of their own independent budget.
+    Clients with no recorded steps yet (never participated) are excluded.
+    """
+    clients_with_history = [a for a in accountants.values() if a.total_steps > 0]
+    if not clients_with_history:
+        return 0.0
+    return max(a.get_epsilon(delta) for a in clients_with_history)

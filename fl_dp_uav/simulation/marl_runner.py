@@ -28,6 +28,7 @@ from typing import Dict, List, Tuple
 import torch
 
 from blockchain.block import Transaction
+from differential_privacy.accountant import max_client_epsilon
 from .full_runner import FullSimulationRunner
 
 
@@ -97,14 +98,14 @@ class MARLSimulationRunner(FullSimulationRunner):
                 w = self.freerider_attackers[cid].free_ride(w)
 
             if dp_cfg["enabled"]:
-                with self._accountant_lock:
-                    # Adaptive clipping (if enabled) rides this same
-                    # per-step subsampled query -- see FLClient.
-                    self.accountant.accumulate(
-                        noise_multiplier=dp_cfg["noise_multiplier"],
-                        sample_rate=self.clients[cid].sample_rate,
-                        num_steps=self.clients[cid].last_num_steps,
-                    )
+                # Each client's own accountant -- no shared state, no lock
+                # needed. Adaptive clipping (if enabled) rides this same
+                # per-step subsampled query -- see FLClient.
+                self.client_accountants[cid].accumulate(
+                    noise_multiplier=dp_cfg["noise_multiplier"],
+                    sample_rate=self.clients[cid].sample_rate,
+                    num_steps=self.clients[cid].last_num_steps,
+                )
             return cid, w, elapsed
 
         with ThreadPoolExecutor(max_workers=len(participants)) as pool:
@@ -176,7 +177,7 @@ class MARLSimulationRunner(FullSimulationRunner):
         self.tracker.record(round_num, 0.0, accuracy, 0.0, len(participants))
 
         priv_eps = (
-            self.accountant.get_epsilon(dp_cfg["target_delta"])
+            max_client_epsilon(self.client_accountants, dp_cfg["target_delta"])
             if dp_cfg["enabled"] else 0.0
         )
 
