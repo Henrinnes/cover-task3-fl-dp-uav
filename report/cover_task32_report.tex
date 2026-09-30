@@ -54,9 +54,10 @@ periodically federated across agents.  All components are implemented in a Pytho
 simulation framework with round-robin multi-GPU support; results in this report
 were run on a single NVIDIA GB10 (Grace Blackwell, DGX Spark-class, unified
 memory), with DP-SGD accelerated via vectorised per-sample gradients
-(\texttt{torch.func.vmap}).  Evaluation uses CIFAR-10 as a standard FL benchmark
-and AIDER (real UAV disaster imagery) as an on-task proxy; EuroSAT is wired in
-(Section~7) but not yet evaluated.
+(\texttt{torch.func.vmap}).  Evaluation uses CIFAR-10 as a standard FL benchmark,
+AIDER (real UAV disaster imagery) as an on-task proxy, and EuroSAT
+(satellite/aerial land-cover) as a third, more class-balanced proxy
+(Section~\ref{sec:eurosat}).
 \end{abstract}
 
 \tableofcontents
@@ -1067,6 +1068,57 @@ participant count (Section~\ref{sec:dpfl-comparison}) --- a fix this
 UAV-scale simulation cannot self-provide by re-tuning any single
 hyperparameter.
 
+\subsection{EuroSAT: A Partial, Non-Sustained Signal}
+\label{sec:eurosat}
+
+EuroSAT (10-class satellite/aerial land-cover, $32\times32$ after resize,
+21{,}600 train / 5{,}400 test images) was the one dataset option wired in
+but never actually evaluated earlier in this report (Section~7). It is
+markedly more class-balanced than AIDER (1604--2439 images/class vs.\
+AIDER's 68\%-majority-class skew) but the same zero-class partitioning
+problem showed up here too: 7 of 20 clients had zero examples of at least
+one class at $\alpha=0.5$ before the \texttt{min\_per\_class} floor
+(Section~8.7) was applied; 0 of 20 after. $\sigma=8.2$ was found the same
+way as the other corrected-accounting runs in this report (binary search
+against the accountant, targeting a 100-round budget at this cohort's
+per-client scale), and a 30-round validation was run at that $\sigma$.
+
+\begin{table}[H]
+  \centering
+  \caption{EuroSAT, 30-round validation ($\sigma=8.2$, \texttt{min\_per\_class=5},
+  otherwise identical config to Section~8.1).}
+  \label{tab:eurosat}
+  \begin{tabular}{lcccc}
+    \toprule
+    Round & 1 & 10 & 20 & 30\\
+    \midrule
+    Raw accuracy & 10.7\% & 20.2\% & 16.1\% & 14.6\%\\
+    Balanced accuracy & 9.6\% & 18.8\% & 16.6\% & 13.6\%\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Unlike every other correctly-accounted result in this report --- CIFAR-10
+(Section~8.1), MobileNetV2 (Section~8.6), AIDER (Section~8.7), adaptive
+clipping (Section~8.8), all flat around chance for their entire run ---
+EuroSAT shows a real rise: balanced accuracy nearly doubles chance
+(9.6\%~$\to$~18.8\%) by round~10. It does not hold: round~20 and round~30
+give 16.6\% and 13.6\%, decaying back toward the 10\% chance level for 10
+classes. We do not have the round-by-round granularity to characterise
+this precisely (checkpoints are logged every 10 rounds, per
+Section~8.1's convention), so we report the shape honestly rather than
+overclaim a specific mechanism: EuroSAT's aerial land-cover imagery is
+plausibly a more linearly-separable feature space than CIFAR-10's natural
+images or AIDER's, which is one explanation why an early real
+signal could partially survive the same noise level that erases it
+immediately for the other datasets. But it fades, not stabilises, over the
+following 20 rounds --- final $\varepsilon = 2.76$, well under budget, so
+this is not a budget-exhaustion artefact; something is degrading the
+signal after the early rounds. Whether that is real overfitting under DP
+noise, non-IID drift as the Stackelberg-selected participant mix varies
+round to round, or another cause is not yet diagnosed, and is added to the
+future work below rather than speculated on further here.
+
 %----------------------------------------------------------------------
 \section{Conclusion}
 %----------------------------------------------------------------------
@@ -1103,7 +1155,12 @@ allocation (WP2 interface);
 participation in a unified policy;
 (vi)~class-weighted loss for AIDER, as a complement to the stratified
 partitioning already implemented (Section~8.7), once~(i) makes the noise
-level survivable enough for either to be visible in the result.
+level survivable enough for either to be visible in the result;
+(vii)~diagnose EuroSAT's round~10-to-30 decay (Section~\ref{sec:eurosat}):
+unlike every other dataset in this report, it showed a real early signal
+that faded rather than never appearing, and distinguishing overfitting
+under DP noise from non-IID participant-mix drift needs round-by-round
+logging finer than this report's every-10-rounds convention.
 
 \vspace{1em}
 \noindent\textbf{Acknowledgements.}
