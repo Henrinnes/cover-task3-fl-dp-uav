@@ -28,7 +28,7 @@ from blockchain.chain import Blockchain
 from blockchain.consensus import PoAConsensus
 from blockchain.block import Transaction
 from blockchain.smart_contract import ResourceSharingContract
-from differential_privacy.accountant import RDPAccountant
+from differential_privacy.accountant import max_client_epsilon
 from federated_learning.client import FLClient
 from federated_learning.server import FLServer
 from federated_learning.convergence import ConvergenceTracker
@@ -212,14 +212,14 @@ class FullSimulationRunner(SimulationRunner):
                     w = self.freerider_attackers[cid].free_ride(w)
 
                 if dp_cfg["enabled"]:
-                    with self._accountant_lock:
-                        # Adaptive clipping (if enabled) rides this same
-                        # per-step subsampled query -- see FLClient.
-                        self.accountant.accumulate(
-                            noise_multiplier=dp_cfg["noise_multiplier"],
-                            sample_rate=self.clients[cid].sample_rate,
-                            num_steps=self.clients[cid].last_num_steps,
-                        )
+                    # Each client's own accountant -- no shared state, no
+                    # lock needed. Adaptive clipping (if enabled) rides this
+                    # same per-step subsampled query -- see FLClient.
+                    self.client_accountants[cid].accumulate(
+                        noise_multiplier=dp_cfg["noise_multiplier"],
+                        sample_rate=self.clients[cid].sample_rate,
+                        num_steps=self.clients[cid].last_num_steps,
+                    )
                 return cid, w, elapsed
 
             from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -301,7 +301,7 @@ class FullSimulationRunner(SimulationRunner):
                 bal_acc = self.server.evaluate_balanced(self.test_loader, self.num_classes)
                 self.balanced_accuracies.append(bal_acc)
                 eps = (
-                    self.accountant.get_epsilon(dp_cfg["target_delta"])
+                    max_client_epsilon(self.client_accountants, dp_cfg["target_delta"])
                     if dp_cfg["enabled"]
                     else 0.0
                 )

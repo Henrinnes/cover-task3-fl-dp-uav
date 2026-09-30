@@ -15,7 +15,6 @@ Server (aggregation + evaluation) runs on GPU 0 (the primary device).
 """
 
 import copy
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -26,7 +25,7 @@ import yaml
 from torch.utils.data import DataLoader, Subset
 
 from data.partition import dirichlet_partition, load_dataset
-from differential_privacy.accountant import RDPAccountant
+from differential_privacy.accountant import RDPAccountant, max_client_epsilon
 from federated_learning.client import FLClient
 from federated_learning.convergence import ConvergenceTracker
 from federated_learning.server import FLServer
@@ -64,7 +63,6 @@ class SimulationRunner:
 
         self.gpu_devices = _gpu_devices()
         self.primary_device = self.gpu_devices[0]
-        self._accountant_lock = threading.Lock()
 
         self._build()
 
@@ -151,7 +149,19 @@ class SimulationRunner:
             for i in range(self.network.num_uavs)
         ]
 
-        self.accountant = RDPAccountant()
+        # One accountant PER CLIENT, not one shared across all of them: a
+        # client's privacy loss depends only on what's revealed about their
+        # own data, not on how many other clients independently also have
+        # their own (eps, delta)-DP guarantee. Pooling all clients into one
+        # running RDP total (the previous design) makes "eps" grow with
+        # population size for reasons that have nothing to do with any
+        # individual client's actual privacy cost -- confirmed directly: a
+        # 100-UAV run's round-1 eps (pooled) was ~4.4x a 20-UAV run's,
+        # tracking the participant-count ratio, not anything about the
+        # noise each client actually adds to their own gradients.
+        self.client_accountants: Dict[int, RDPAccountant] = {
+            i: RDPAccountant() for i in range(self.network.num_uavs)
+        }
         self.tracker = ConvergenceTracker(target_accuracy=fl_cfg.get("target_accuracy", 0.65))
 
         self.min_snr_db   = cfg["power"]["min_snr_db"]
@@ -194,16 +204,18 @@ class SimulationRunner:
             self.clients[cid].local_epochs = fl_epochs
 
             if dp_cfg["enabled"]:
-                with self._accountant_lock:
-                    # Adaptive clipping (if enabled) rides this same
-                    # per-step subsampled query -- Theorem 1 guarantees the
-                    # joint release costs the same as this nominal call, so
-                    # no separate accounting is needed (see FLClient).
-                    self.accountant.accumulate(
-                        noise_multiplier=dp_cfg["noise_multiplier"],
-                        sample_rate=self.clients[cid].sample_rate,
-                        num_steps=self.clients[cid].last_num_steps,
-                    )
+                # Each client's own accountant -- no cross-client shared
+                # state, so no lock needed (each thread only ever touches
+                # its own client's entry). Adaptive clipping (if enabled)
+                # rides this same per-step subsampled query -- Theorem 1
+                # guarantees the joint release costs the same as this
+                # nominal call, so no separate accounting is needed (see
+                # FLClient).
+                self.client_accountants[cid].accumulate(
+                    noise_multiplier=dp_cfg["noise_multiplier"],
+                    sample_rate=self.clients[cid].sample_rate,
+                    num_steps=self.clients[cid].last_num_steps,
+                )
             return cid, w, self.clients[cid].num_samples
 
         # Distribute weights before spawning threads (avoids deepcopy race)
@@ -260,7 +272,7 @@ class SimulationRunner:
             if rnd % self.log_interval == 0 or rnd == 1:
                 loss, acc = self.server.evaluate(self.test_loader)
                 eps = (
-                    self.accountant.get_epsilon(dp_cfg["target_delta"])
+                    max_client_epsilon(self.client_accountants, dp_cfg["target_delta"])
                     if dp_cfg["enabled"] else 0.0
                 )
                 self.tracker.record(rnd, loss, acc, eps, len(selected))
