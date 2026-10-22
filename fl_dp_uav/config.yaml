@@ -28,14 +28,22 @@ fl:
 dp:
   enabled: true
   max_grad_norm: 1.0          # gradient clipping threshold C
-  # σ=1.1 previously understated privacy cost: the accountant was credited
-  # with num_steps=local_epochs instead of the true minibatch step count
-  # (epochs * batches/epoch), undercounting composition by ~1-2 orders of
-  # magnitude (fixed in federated_learning/client.py + the three runner
-  # accumulate() call sites). 6.6 is the smallest sigma, found via binary
-  # search against the corrected accountant, that keeps a 200-round run at
-  # this batch_size/local_epochs within the target_epsilon=10 budget.
-  noise_multiplier: 6.6       # σ — trades accuracy for privacy
+  # Two accounting bugs were fixed before arriving at this value (see the
+  # report's Section 8 "Correction" box):
+  #   1. the accountant was credited with num_steps=local_epochs instead of
+  #      the true minibatch step count (epochs * batches/epoch), under-
+  #      counting composition by ~1-2 orders of magnitude;
+  #   2. a single shared RDPAccountant pooled ALL clients' costs into one
+  #      budget, inflating reported eps with population size.
+  # With both fixed, 2.11 is the smallest sigma (binary-searched against the
+  # corrected accountant) giving a genuine PER-CLIENT eps<=10 guarantee over
+  # 200 rounds at this batch_size/local_epochs -- worst case being a client
+  # that participates in every single round. An intermediate version used
+  # 6.6, derived under bug 2; that was ~3x too conservative and suppressed
+  # learning entirely. NOTE: the correct value is setting-specific -- it
+  # depends on client count, batch size, local epochs and round budget --
+  # so re-derive it if you change any of those.
+  noise_multiplier: 2.11      # σ — trades accuracy for privacy
   target_epsilon: 10.0        # stop if ε budget exceeded
   target_delta: 1.0e-5        # δ for (ε, δ)-DP guarantee
 
