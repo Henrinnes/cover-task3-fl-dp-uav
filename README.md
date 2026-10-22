@@ -8,20 +8,39 @@
 
 ---
 
-## ⚠️ Privacy-accounting correction
+## Headline result, and two privacy-accounting corrections
 
-An earlier version of this codebase **undercounted the true DP-SGD step count**
-fed to the RDP accountant (it was credited with the local *epoch* count, not
-the actual number of noisy minibatch steps — roughly 78× fewer than really
-taken for a typical CIFAR-10 client). This meant the reported ε values
-understated the true privacy cost by roughly 20–30×. It's fixed now
-(`federated_learning/client.py` + the three `accumulate()` call sites in
-`simulation/`), and `config.yaml`'s default `noise_multiplier` is raised from
-1.1 to 6.6 — the minimum value that keeps a 200-round run within the
-ε≤10 budget once accounted for correctly. At that noise level, **the model
-does not learn** on CIFAR-10 (9.98% accuracy — chance level for 10 classes).
+**The framework learns under a genuine, correctly-accounted per-client
+(ε≤10)-DP guarantee**: 23.6% final / 28.2% peak test accuracy on CIFAR-10
+over 200 rounds at σ=2.11, spending ε=6.45. Getting to that number required
+finding and fixing two independent accounting bugs, in sequence:
+
+1. **Step undercounting.** The RDP accountant was credited with the local
+   *epoch* count instead of the actual noisy-minibatch-step count — ~78×
+   fewer steps than really taken for a typical CIFAR-10 client — so reported
+   ε understated the true cost by ~20–30×. (Fixed in
+   `federated_learning/client.py` + the three `accumulate()` call sites.)
+2. **Pooled accounting.** A *single shared* `RDPAccountant` received every
+   client's cost, pooling independent clients into one budget that grows
+   with population size — which has nothing to do with any one client's
+   actual privacy loss. (Fixed: each client now has its own accountant;
+   `max_client_epsilon` reports the worst case across them, not a sum.)
+
+Bug 2 matters beyond bookkeeping: it made σ=6.6 look necessary when a real
+per-client ε≤10 guarantee only needs **σ≈2.11**. At the over-conservative
+σ=6.6 the model sat at chance (~10%), and an intermediate version of this
+report concluded the UAV-scale cohort was simply too small to learn under
+real privacy. **That conclusion was wrong** — an artefact of the bug, now
+corrected throughout.
+
+⚠️ **Not yet re-validated:** the MobileNetV2, AIDER, adaptive-clipping and
+EuroSAT experiments (report Sections 8.6–8.9) were all run at
+Bug-2-affected σ values. Their σ-independent findings stand; anything
+attributing failure to "noise at this cohort size" is an open question
+pending re-run. This is the top future-work item.
+
 See `report/cover_task32_report.pdf` (Section 8, "Correction" box) for the
-full writeup, including the diagnostic numbers that led to the fix.
+full writeup and diagnostic numbers.
 
 ---
 
@@ -122,11 +141,11 @@ Key parameters and their research significance:
 | Parameter | Default | Effect |
 |---|---|---|
 | `fl.num_rounds` | 200 | Communication rounds budget |
-| `dp.noise_multiplier` (σ) | 6.6 | Privacy–accuracy tradeoff: ↑σ = more private, less accurate. Raised from 1.1 — see the privacy-accounting correction above; at this UAV-scale cohort (11 active/round) and step count, σ=6.6 is the minimum needed to keep a 200-round run within ε≤10 once accounted for correctly, and at that noise level accuracy does not rise above chance |
+| `dp.noise_multiplier` (σ) | 2.11 | Privacy–accuracy tradeoff: ↑σ = more private, less accurate. 2.11 is the minimum σ giving a genuine **per-client** ε≤10 guarantee over 200 rounds at this batch size / local-epoch count — see the corrections above. The correct value is setting-specific (depends on client count, batch size, epochs, rounds); re-derive it if you change those |
 | `dp.max_grad_norm` (C) | 1.0 | Gradient clipping threshold; bounds sensitivity |
 | `dp.target_epsilon` | 10.0 | Stops training if ε budget exceeded |
-| `dp.adaptive_clipping` | false | Tracks `max_grad_norm` toward the gradient-norm quantile instead of leaving it fixed (Andrew et al., 2021) — implemented, validated, no accuracy improvement at this cohort size (σ itself is the binding constraint, not how well C is tuned) — see report Section 8.8 |
-| `model.backbone` | simplecnn | `simplecnn` (~0.6M params) or `mobilenetv2` (~2.2M params, GroupNorm); the latter does not currently converge under DP-SGD at these hyperparameters — see report Section 8.6 |
+| `dp.adaptive_clipping` | false | Tracks `max_grad_norm` toward the gradient-norm quantile instead of leaving it fixed (Andrew et al., 2021). Mechanism implemented and verified correct; showed no improvement when tested at the (since-superseded) σ=6.6, and has **not** been re-tested against the now-learning σ=2.11 baseline — see report Section 8.8 |
+| `model.backbone` | simplecnn | `simplecnn` (~0.6M params) or `mobilenetv2` (~2.2M params, GroupNorm); `mobilenetv2` failed to learn when tested — including with DP fully disabled, so at least partly architectural rather than noise-driven — but that test predates the σ correction and is queued for re-validation — see report Section 8.6 |
 | `data.dirichlet_alpha` | 0.5 | Non-IID degree: ↓α = more heterogeneous UAV data |
 | `channel.rician_k` | 10 dB | A2A channel quality: ↑K = stronger LoS |
 | `power.min_snr_db` | 5 dB | Minimum SNR for UAV to participate |
@@ -204,28 +223,24 @@ source of truth for actual experimental numbers, figures, and honest
 writeups of what worked and what didn't — this README describes the
 framework's capabilities and config, not results. It includes:
 
-- The privacy-accounting correction (Section 8, "Correction" box) and the
-  real CIFAR-10 outcome under a genuinely correct ε≤10 budget (9.98%
-  accuracy — chance level)
+- Both privacy-accounting corrections (Section 8, "Correction" box) and the
+  real CIFAR-10 outcome under a genuinely correct per-client ε≤10 budget:
+  **23.6% final / 28.2% peak**, a real learning curve (Section 8.1)
 - A PoA consensus deadlock found and fixed (Section 8.3), with before/after
   blockchain behaviour
 - An MARL exploration-decay bug found and fixed (Section 8.4)
-- Four independent lines of evidence for the same root cause — MobileNetV2
-  doesn't converge under DP-SGD at these hyperparameters (Section 8.6);
-  AIDER's data-scarcity/class-imbalance problem was fixed with stratified
-  partitioning (verified: 9/20 clients with zero examples of some class →
-  0/20), but still doesn't converge at a correctly-accounted ε≤10 budget
-  (Section 8.7); adaptive clipping (Andrew et al., 2021) was implemented
-  and validated — two design mistakes caught and fixed along the way using
-  the accountant/real training rather than assumed (an initial "separate
-  mechanism" design added ~150% ε overhead; the paper's own learning rate
-  destabilised training applied per-minibatch instead of per-round) — and
-  it doesn't move the result either (Section 8.8). All four point to the
-  same binding constraint: this framework's small UAV cohort (11–20
-  clients) needs *more clients per round*, not a better-tuned
-  hyperparameter, before a genuine privacy budget and real learning can
-  coexist — now the lead future-work item, and one this simulation can't
-  self-provide by config change alone
+- Four experiments run at the over-conservative σ, each with findings worth
+  keeping but conclusions now partly re-opened (Sections 8.6–8.9):
+  MobileNetV2 fails to learn *even with DP fully disabled* (a real
+  architectural finding, σ-independent); AIDER's zero-class partitioning
+  problem was diagnosed and fixed (9/20 clients missing a class → 0/20);
+  adaptive clipping (Andrew et al., 2021) was implemented with two design
+  mistakes caught via the accountant/real training rather than assumed (an
+  initial "separate mechanism" design added ~150% ε overhead; the paper's
+  own learning rate destabilised training applied per-minibatch instead of
+  per-round); EuroSAT showed a real early signal that then decayed. What
+  these do *not* establish any more is the "cohort too small to learn"
+  conclusion they were previously read as supporting — see the caveat above
 - A literature comparison against published DP-FL results, built only from
   numbers independently verified against each paper's primary source
   (Section 8.5)
