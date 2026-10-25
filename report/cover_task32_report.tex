@@ -594,16 +594,25 @@ $\varepsilon\approx2.65$. The correct minimum is $\sigma\approx2.11$.
 small to learn under real privacy" conclusion in the previous version of
 this report was itself an artefact of Bug~2, not a finding about this
 framework's fundamental limits. Sections~8.6--8.9 (MobileNetV2, AIDER,
-adaptive clipping, EuroSAT) were run at the Bug-2-affected, over-conservative
-$\sigma$ values before this fix and have \emph{not} been re-validated at
-the correct $\sigma$ as of this report version; their qualitative findings
-that do not depend on $\sigma$'s absolute value (e.g.\ MobileNetV2 failing
-to learn even with DP fully disabled) stand, but conclusions attributing
-failure to "noise at this cohort size" should be treated as open questions
-pending re-validation, not settled. Throughout both bugs, the noise
-physically added during training was always drawn using the configured
-$\sigma$ directly, never derived from the accountant --- only the
-\emph{reported} $\varepsilon$ was ever wrong, not what was actually run.
+adaptive clipping, EuroSAT) were all run at the Bug-2-affected,
+over-conservative $\sigma$ values before this fix. \textbf{AIDER
+(Section~8.7) and EuroSAT (Section~8.9) have since been re-validated} at
+their own correctly-calibrated $\sigma$ (1.94 and 2.17 respectively,
+derived the same way as Section~8.1's 2.11): EuroSAT reverses the same way
+CIFAR-10 did (its earlier rise-then-fade becomes a clean monotonic rise to
+36.2\% balanced accuracy), but AIDER does \emph{not} --- it remains at
+chance even with correct accounting, the one dataset in this report where
+the original "cohort too small" framing turns out not to be purely an
+artefact. MobileNetV2 (Section~8.6) and adaptive clipping (Section~8.8)
+remain un-re-validated as of this report version; their qualitative
+findings that do not depend on $\sigma$'s absolute value (e.g.\ MobileNetV2
+failing to learn even with DP fully disabled) stand, but conclusions
+attributing failure to "noise at this cohort size" should be treated as
+open questions pending re-validation, not settled. Throughout all three
+re-runs, the noise physically added during training was always drawn
+using the configured $\sigma$ directly, never derived from the accountant
+--- only the \emph{reported} $\varepsilon$ was ever wrong in the two
+original bugs, not what was actually run.
 \end{quote}
 
 \subsection{Convergence Under Differential Privacy}
@@ -955,13 +964,13 @@ Section~\ref{sec:dpfl-comparison}.
 \subsection{Real UAV Imagery (AIDER): Integration and a Convergence Diagnosis}
 \label{sec:aider}
 
-\emph{This section's $\sigma=5.0$ predates the pooled-accounting fix
-(Section~8, Correction box) and was found more conservative than a correct
-per-client guarantee requires (same bug as Section~8.1's $\sigma=6.6\to2.11$
-correction); not yet re-validated at the correct, lower $\sigma$. The
-stratified-partitioning fix below (zero-class clients: 9/20 $\to$ 0/20)
-stands regardless, but whether it is now sufficient for real learning,
-given Section~8.1's reversal, is an open question.}
+\emph{This section's original $\sigma=5.0$ predated the pooled-accounting
+fix (Section~8, Correction box) and was more conservative than a correct
+per-client guarantee requires (same bug as Section~8.1's
+$\sigma=6.6\to2.11$ correction). Unlike CIFAR-10 and EuroSAT, \textbf{this
+has since been re-validated at the correct $\sigma=1.94$ and the result
+does not reverse} --- AIDER still shows no learning above chance. See the
+re-validation paragraph near the end of this section.}
 
 CIFAR-10 is a standard FL benchmark but not on-task imagery; the original
 future-work list called for validating on real UAV disaster imagery. FloodNet
@@ -1069,10 +1078,50 @@ question for this dataset rather than a closed one.
 The "cohort too small to learn under real privacy" framing this section
 previously shared with Sections~8.1 and~8.6 turned out to be an artefact
 of the pooled-accounting bug (Section~8, Correction box), not a finding
-about this framework's limits. AIDER's own correct $\sigma$ has not yet
-been re-derived or re-run; doing so, and re-testing whether the stratified
-partitioning fix above is now sufficient on its own, is queued as future
-work rather than completed this session.
+about this framework's limits in general --- but, unlike CIFAR-10, it is
+not resolved for AIDER specifically.
+
+\paragraph{Re-validation at the correct $\sigma$.} AIDER's worst-case
+client (smallest partition after stratification, batch size~4, 5 local
+epochs) has only 61 samples --- the correct $\sigma$ for a genuine
+per-client $\varepsilon\le10$ guarantee over 30 rounds at this scale,
+binary-searched the same way as Section~8.1's $\sigma=2.11$, is
+$\sigma\approx1.94$, close to CIFAR-10's value despite the very different
+dataset. A 30-round re-run at $\sigma=1.94$ (Figure~\ref{fig:aider-correct})
+still does \emph{not} show real learning: balanced accuracy is 20.4\% at
+round~1, 14.9\% at round~10, 21.6\% at round~20, and 22.7\% at round~30
+(mean 19.9\% across all four checkpoints) --- statistically indistinguishable
+from the 20\% chance level for 5 classes, with no consistent trend. Raw
+accuracy continues to swing wildly (44.4\%, 19.3\%, 61.5\%, 42.8\%), the
+same majority-class-collapse signature as before. Final $\varepsilon=5.22$,
+comfortably within budget --- so, as with the other datasets, this is not
+a budget-exhaustion artefact.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{aider_correct_sigma.pdf}
+  \caption{%
+    AIDER balanced accuracy (top) and cumulative privacy budget $\varepsilon$
+    (bottom) over 30 rounds at the correctly-calibrated $\sigma=1.94$.
+    Unlike CIFAR-10 (Section~8.1) and EuroSAT (Section~8.9) at their own
+    correct $\sigma$, balanced accuracy never departs meaningfully from the
+    20\% chance level (dotted line) for 5 classes.
+  }
+  \label{fig:aider-correct}
+\end{figure}
+
+This makes AIDER the one dataset in this report where the "cohort too
+small" framing does \emph{not} turn out to be purely an accounting
+artefact --- at a genuine $\varepsilon\le10$ budget, something else is
+still suppressing learning. The two most likely remaining candidates,
+both already implicated earlier in this section, are AIDER's severe class
+imbalance (the majority ``normal'' class at 68\% of the data) and its very
+small worst-case client (61 samples is an order of magnitude below
+EuroSAT's 389 or CIFAR-10's $\sim$2500-average), rather than anything
+about privacy noise calibration, which is now ruled out. Class-weighted
+loss (already queued below) and/or excluding or flagging clients below a
+minimum sample-count threshold are the next concrete things to try, not a
+further $\sigma$ adjustment.
 
 \subsection{Adaptive Clipping: Implemented and Validated at an Over-Conservative $\sigma$}
 \label{sec:adaptive-clipping}
@@ -1129,8 +1178,16 @@ correctly-calibrated $\sigma=2.11$ baseline is the real open question this
 section leaves for re-validation, not the "narrows to more
 participants" conclusion previously drawn here.
 
-\subsection{EuroSAT: A Partial, Non-Sustained Signal}
+\subsection{EuroSAT: From a Non-Sustained Signal to Real Learning}
 \label{sec:eurosat}
+
+\emph{The $\sigma=8.2$ result below predates the pooled-accounting fix
+(Section~8, Correction box) and, like Section~8.1's original $\sigma=6.6$,
+was found to be considerably more conservative than a correct per-client
+guarantee requires. We keep the original finding (the signal that rises
+then fades) as reported at the time, then give the re-validated result at
+the correct $\sigma=2.17$ below it --- which, like CIFAR-10, reverses the
+conclusion.}
 
 EuroSAT (10-class satellite/aerial land-cover, $32\times32$ after resize,
 21{,}600 train / 5{,}400 test images) was the one dataset option wired in
@@ -1140,9 +1197,10 @@ AIDER's 68\%-majority-class skew) but the same zero-class partitioning
 problem showed up here too: 7 of 20 clients had zero examples of at least
 one class at $\alpha=0.5$ before the \texttt{min\_per\_class} floor
 (Section~8.7) was applied; 0 of 20 after. $\sigma=8.2$ was found the same
-way as the other corrected-accounting runs in this report (binary search
-against the accountant, targeting a 100-round budget at this cohort's
-per-client scale), and a 30-round validation was run at that $\sigma$.
+way as the other Bug-2-affected runs in this report (binary search against
+the then-current, pooled accountant, targeting a 100-round budget at this
+cohort's per-client scale), and a 30-round validation was run at that
+$\sigma$.
 
 \begin{table}[H]
   \centering
@@ -1159,26 +1217,51 @@ per-client scale), and a 30-round validation was run at that $\sigma$.
   \end{tabular}
 \end{table}
 
-Unlike every other correctly-accounted result in this report --- CIFAR-10
-(Section~8.1), MobileNetV2 (Section~8.6), AIDER (Section~8.7), adaptive
-clipping (Section~8.8), all flat around chance for their entire run ---
-EuroSAT shows a real rise: balanced accuracy nearly doubles chance
-(9.6\%~$\to$~18.8\%) by round~10. It does not hold: round~20 and round~30
-give 16.6\% and 13.6\%, decaying back toward the 10\% chance level for 10
-classes. We do not have the round-by-round granularity to characterise
-this precisely (checkpoints are logged every 10 rounds, per
-Section~8.1's convention), so we report the shape honestly rather than
-overclaim a specific mechanism: EuroSAT's aerial land-cover imagery is
-plausibly a more linearly-separable feature space than CIFAR-10's natural
-images or AIDER's, which is one explanation why an early real
-signal could partially survive the same noise level that erases it
-immediately for the other datasets. But it fades, not stabilises, over the
-following 20 rounds --- final $\varepsilon = 2.76$, well under budget, so
-this is not a budget-exhaustion artefact; something is degrading the
-signal after the early rounds. Whether that is real overfitting under DP
-noise, non-IID drift as the Stackelberg-selected participant mix varies
-round to round, or another cause is not yet diagnosed, and is added to the
-future work below rather than speculated on further here.
+At the time, this looked like a genuinely distinct result: unlike the
+other Bug-2-affected runs in this report, which sat flat at chance for
+their entire duration, EuroSAT showed balanced accuracy nearly double
+chance (9.6\%~$\to$~18.8\%) by round~10 before fading back to 16.6\% and
+13.6\% at rounds~20 and~30. Final $\varepsilon=2.76$, well under budget, so
+the fade was not a budget-exhaustion artefact. We were unable to diagnose
+a specific cause at the time (overfitting under DP noise vs.\ non-IID
+participant-mix drift were both plausible) and left it as an open question.
+
+\paragraph{Re-validation at the correct $\sigma$.} The correct $\sigma$ for
+EuroSAT's worst-case client (389 samples, batch size~32, 5 local epochs,
+30-round budget) is $\sigma\approx2.17$ --- binary-searched the same way as
+Section~8.1's $\sigma=2.11$ and AIDER's $\sigma=1.94$ above, and landing in
+the same narrow band despite three very different datasets. A 30-round
+re-run at $\sigma=2.17$ (Figure~\ref{fig:eurosat-correct}) resolves the
+open question definitively: balanced accuracy rises
+\emph{monotonically} across all four checkpoints --- 14.0\%, 27.2\%,
+29.5\%, 36.2\% at rounds~1/10/20/30 --- with no fade. Final raw accuracy
+36.9\%, final $\varepsilon=4.43$, within budget. The round~20--30 decay in
+the original $\sigma=8.2$ run was the accounting bug, not a property of
+EuroSAT or this framework: at a noise level roughly $3.8\times$ higher
+than necessary, whatever signal the model found early was unable to
+survive continued training, and what looked like overfitting or
+participant-drift was actually noise slowly eroding a fragile result. At
+the correct noise level there is no fragility to erode. This is the
+strongest learning result of any dataset in this report (36.2\% balanced
+accuracy vs.\ CIFAR-10's 23.6\%/28.2\% and AIDER's $\sim$20\%, chance
+levels of 10\%/10\%/20\% respectively), plausibly because EuroSAT's aerial
+land-cover classes are a more linearly-separable feature space than
+CIFAR-10's natural images or AIDER's imbalanced disaster imagery --- a
+hypothesis consistent with, but not proven by, this single result.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{eurosat_correct_sigma.pdf}
+  \caption{%
+    EuroSAT balanced accuracy (top) and cumulative privacy budget
+    $\varepsilon$ (bottom) over 30 rounds at the correctly-calibrated
+    $\sigma=2.17$. Unlike the original $\sigma=8.2$ run (Table~\ref{tab:eurosat}),
+    balanced accuracy rises monotonically with no fade, reaching 36.2\% by
+    round~30 --- well above the 10\% chance level (dotted line) and the
+    strongest result of any dataset tested in this report.
+  }
+  \label{fig:eurosat-correct}
+\end{figure}
 
 %----------------------------------------------------------------------
 \section{Conclusion}
@@ -1213,21 +1296,20 @@ accountant, producing results that look like a clean scientific negative
 --- is an easy one to repeat.
 
 \paragraph{Future work.}
-(i)~\textbf{Re-validate Sections~8.6--8.9 at correctly-calibrated $\sigma$.}
-This is the highest-priority item and supersedes what previously stood
-here. Sections~8.6 (MobileNetV2), 8.7 (AIDER), 8.8 (adaptive clipping) and
-8.9 (EuroSAT) were each run at $\sigma$ values derived from the
-Bug-2-affected pooled accountant (Section~8, Correction box), and so at
-roughly $3\times$ more noise than a genuine per-client $\varepsilon\le10$
-guarantee requires. Section~8.1, once re-run at the correct
-$\sigma=2.11$, went from chance-level to a real 21--28\% learning curve;
-the same correction has not yet been applied to the other four. Each needs
-its own correct $\sigma$ re-derived (the value is setting-specific --- it
-depends on client count, batch size, local epochs and round budget) and
-the experiment re-run before any of their conclusions can be trusted.
-The shared "cohort too small to learn under real privacy" framing those
-sections previously carried was an artefact of the accounting bug, not a
-finding;
+(i)~\textbf{Re-validate Sections~8.6 and~8.8 at correctly-calibrated
+$\sigma$.} Of the four sections originally run at Bug-2-affected,
+over-conservative $\sigma$ values, two are now done: AIDER (Section~8.7,
+$\sigma=1.94$) and EuroSAT (Section~8.9, $\sigma=2.17$) have been
+re-validated, with opposite outcomes --- EuroSAT reverses to a clean 36.2\%
+learning curve, AIDER does not and remains at chance. MobileNetV2
+(Section~8.6) and adaptive clipping (Section~8.8) remain outstanding.
+Each needs its own correct $\sigma$ re-derived (the value is
+setting-specific --- it depends on client count, batch size, local epochs
+and round budget, though all four datasets re-derived so far land in a
+narrow 1.9--2.2 band) and the experiment re-run before their conclusions
+can be trusted. For adaptive clipping specifically, the live question is
+whether it adds anything on top of Section~8.1's now-learning
+$\sigma=2.11$ baseline, not whether it rescues a chance-level result;
 (i-b)~\textbf{Larger effective participation}, still worth testing on its
 own merits: more clients contributing gradient signal per round should
 improve the aggregate signal-to-noise ratio, and since each client's
@@ -1235,6 +1317,14 @@ accounting is now independent (Section~8, Correction box), scaling the
 simulated UAV count costs nothing in privacy terms --- it is a config
 change (\texttt{uav\_network.num\_uavs}), not a hardware constraint as
 previously stated here;
+(i-c)~\textbf{Diagnose AIDER's remaining failure.} Re-validation ruled out
+noise miscalibration as AIDER's problem (Section~8.7) --- it is the one
+dataset in this report where correcting $\sigma$ did not change the
+outcome. The two live candidates are severe class imbalance (68\% majority
+class) and a very small worst-case client (61 samples, an order of
+magnitude below EuroSAT's 389 or CIFAR-10's $\sim$2500-average). Item~(vi)
+below (class-weighted loss) and a minimum per-client sample-count
+threshold are the concrete next experiments, not a further $\sigma$ sweep;
 (ii)~Add DP protection to the Q-network federation step for formal policy privacy;
 (iii)~replace PoRS simulation with SGX-based hardware attestation for deployment;
 (iv)~extend convergence analysis to 3D trajectory optimisation jointly with power
@@ -1242,13 +1332,10 @@ allocation (WP2 interface);
 (v)~explore multi-task MARL where agents jointly optimise sensing, routing, and FL
 participation in a unified policy;
 (vi)~class-weighted loss for AIDER, as a complement to the stratified
-partitioning already implemented (Section~8.7), once~(i) makes the noise
-level survivable enough for either to be visible in the result;
-(vii)~diagnose EuroSAT's round~10-to-30 decay (Section~\ref{sec:eurosat}):
-unlike every other dataset in this report, it showed a real early signal
-that faded rather than never appearing, and distinguishing overfitting
-under DP noise from non-IID participant-mix drift needs round-by-round
-logging finer than this report's every-10-rounds convention.
+partitioning already implemented (Section~8.7) --- now the main open lever
+for AIDER specifically (item~(i-c)), since re-validation at correct
+$\sigma$ (this item's original premise) is done and did not resolve it on
+its own.
 
 \vspace{1em}
 \noindent\textbf{Acknowledgements.}
