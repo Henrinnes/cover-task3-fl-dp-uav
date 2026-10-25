@@ -23,12 +23,12 @@
 
 \title{\textbf{Task 3.2: Secure, Privacy-Preserved and Incentive-Based\\
 Data Sharing in UAV Networks for Emergency Response}\\[6pt]
-\large COVER Project --- EU MSCA Staff Exchanges, Grant No.\ 101086228}
+\large COVER Project: EU MSCA Staff Exchanges, Grant No.\ 101086228}
 
 \author{Henry Kabuye\\
 \small Northumbria University\\
 \small Supervisor: Professor Nauman Aslam\\
-\small COVER Project --- Task 3.2 (Lead: Georg-August-Universit\"at G\"ottingen)\\
+\small COVER Project: Task 3.2 (Lead: Georg-August-Universit\"at G\"ottingen)\\
 \small Supported by: CentraleSupelec (CS) and UESTC}
 
 \date{May 2026}
@@ -288,8 +288,8 @@ median norm) plus inter-round staleness check (cosine similarity $> 0.9999$).
 
 \subsection{Motivation and Problem Statement}
 
-The static participation model used in standard Federated Learning --- randomly
-selecting a fixed fraction of eligible UAVs each round --- ignores the rich
+The static participation model used in standard Federated Learning (randomly
+selecting a fixed fraction of eligible UAVs each round) ignores the rich
 state heterogeneity present in real UAV deployments.  At any given round, each
 UAV possesses a distinct combination of residual battery level, wireless channel
 quality, local data quality, and accumulated experience of past reward signals.
@@ -303,7 +303,7 @@ its observed state to an optimal participation action.  The result is an
 \emph{agentic FL framework} in which UAVs are fully autonomous agents whose
 collective behaviour emerges from individual rational learning rather than
 top-down scheduling.  Q-network weights are periodically shared across agents
-via FedAvg --- a \emph{federated Q-learning} step that accelerates policy
+via FedAvg: a \emph{federated Q-learning} step that accelerates policy
 convergence by propagating experience across the swarm.
 
 \subsection{Markov Decision Process Formulation}
@@ -500,7 +500,7 @@ and comprises 31 modules across 11 packages. Client training is
 architected for round-robin multi-GPU assignment and
 \texttt{ThreadPoolExecutor}-based per-round parallelism, but the results in
 this report were produced on a single NVIDIA GB10 GPU (Grace Blackwell,
-DGX Spark-class, $\approx$131~GB unified CPU/GPU memory, aarch64) --- a
+DGX Spark-class, $\approx$131~GB unified CPU/GPU memory, aarch64), a
 different and considerably more capable machine than the 3$\times$ GTX~1070~Ti
 (8~GB VRAM each, x86\_64) setup originally targeted; the multi-GPU
 round-robin path itself was not exercised for these runs since only one GPU
@@ -509,7 +509,7 @@ code is hosted at:
 \begin{center}
   \url{https://github.com/Henrinnes/cover-task3-fl-dp-uav}
 \end{center}
-(Private repository --- collaborator access available upon request.)
+(Private repository: collaborator access available upon request.)
 
 \begin{table}[H]
 \centering
@@ -557,25 +557,25 @@ Hidden & 64 & Q-network hidden layer width \\
 report went through two rounds of privacy-accounting correction, and the
 second reverses a conclusion the first one reached.
 
-\emph{Bug 1 --- step undercounting.} An earlier version claimed
+\emph{Bug 1: step undercounting.} An earlier version claimed
 $\varepsilon = 5.93$ after 200 rounds at $\sigma = 1.1$. The RDP accountant
 was credited with the local \emph{epoch} count as the number of DP-SGD
 steps, when each client actually takes one independent noisy gradient step
-per \emph{minibatch} --- roughly 78$\times$ more steps per epoch than
+per \emph{minibatch}, roughly 78$\times$ more steps per epoch than
 credited for a typical CIFAR-10 client. The true $\varepsilon$ for that
 run was $\approx$191, about 20--30$\times$ over budget. Fixed in
 \texttt{federated\_learning/client.py} and the three accountant call sites
 across \texttt{runner.py}, \texttt{full\_runner.py}, and
 \texttt{marl\_runner.py}. This version of the report then re-ran Section~8.1
 at $\sigma = 6.6$ (binary-searched against the fixed accountant to keep a
-200-round run within budget) and found no learning above chance ---
+200-round run within budget) and found no learning above chance,
 reported at the time as evidence that this framework's UAV-scale cohort
 could not learn under a genuine privacy guarantee.
 
-\emph{Bug 2 --- pooled accounting (found scoping a cohort-size experiment).}
+\emph{Bug 2: pooled accounting (found scoping a cohort-size experiment).}
 \texttt{runner.py} created \emph{one shared} \texttt{RDPAccountant} and
-every client's \texttt{accumulate()} call, from every client, fed into it
---- pooling independent clients' privacy costs into one running total that
+every client's \texttt{accumulate()} call, from every client, fed into it,
+pooling independent clients' privacy costs into one running total that
 grows with population size, which has nothing to do with any individual
 client's actual privacy loss (a client's privacy depends only on what's
 revealed about their own data). Verified directly: a 100-UAV run's round-1
@@ -586,7 +586,7 @@ own accountant (\texttt{differential\_privacy/accountant.py}'s
 \emph{independent} accountants, not a sum). This revealed $\sigma=6.6$ was
 itself $\approx$3$\times$ more conservative than a genuine per-client
 $\varepsilon\le10$ guarantee requires: at $\sigma=6.6$, a single client
-present for all 200 rounds --- the worst case --- only reaches
+present for all 200 rounds (the worst case) only reaches
 $\varepsilon\approx2.65$. The correct minimum is $\sigma\approx2.11$.
 
 \textbf{Section~8.1 below is the result at $\sigma=2.11$, and it learns}:
@@ -600,7 +600,7 @@ over-conservative $\sigma$ values before this fix. \textbf{AIDER
 their own correctly-calibrated $\sigma$ (1.94 and 2.17 respectively,
 derived the same way as Section~8.1's 2.11): EuroSAT reverses the same way
 CIFAR-10 did (its earlier rise-then-fade becomes a clean monotonic rise to
-36.2\% balanced accuracy), but AIDER does \emph{not} --- it remains at
+36.2\% balanced accuracy), but AIDER does \emph{not}: it remains at
 chance even with correct accounting, the one dataset in this report where
 the original "cohort too small" framing turns out not to be purely an
 artefact. MobileNetV2 (Section~8.6) and adaptive clipping (Section~8.8)
@@ -610,8 +610,8 @@ failing to learn even with DP fully disabled) stand, but conclusions
 attributing failure to "noise at this cohort size" should be treated as
 open questions pending re-validation, not settled. Throughout all three
 re-runs, the noise physically added during training was always drawn
-using the configured $\sigma$ directly, never derived from the accountant
---- only the \emph{reported} $\varepsilon$ was ever wrong in the two
+using the configured $\sigma$ directly, never derived from the accountant;
+only the \emph{reported} $\varepsilon$ was ever wrong in the two
 original bugs, not what was actually run.
 \end{quote}
 
@@ -621,7 +621,7 @@ The simulation tracks test accuracy and cumulative privacy budget $\varepsilon$
 per FL round. With both accounting bugs fixed (the quote box above), 20 UAVs
 (channel-eligibility limits active participants to 11/20 per round under
 $\gamma_{\min}=5$~dB), and $C = 1.0$ gradient clipping, a genuine per-client
-$\varepsilon\le10$ guarantee over 200 rounds requires $\sigma = 2.11$ ---
+$\varepsilon\le10$ guarantee over 200 rounds requires $\sigma = 2.11$,
 roughly a third of the $\sigma=6.6$ the previous (Bug-2-affected) version of
 this report used. At this correctly-calibrated noise level \textbf{the model
 learns}: accuracy rises from 10.4\% (round~1, near the 10\% chance baseline
@@ -631,7 +631,7 @@ to a peak of \textbf{28.2\%} at round~90, settling into a 21--28\% band
 accuracy 23.6\%, final $\varepsilon=6.45$, within the $\varepsilon_{\max}=10$
 budget with some headroom remaining. This does not reach the 65\% target
 (\texttt{convergence\_round} is unset), but it is a real, rising-then-plateauing
-learning curve --- not noise around chance, which is what the same
+learning curve, not noise around chance, which is what the same
 experiment showed at the (incorrectly calibrated) $\sigma=6.6$.
 Section~\ref{sec:dpfl-comparison} compares this outcome to published DP-FL
 benchmarks.
@@ -646,7 +646,7 @@ benchmarks.
     rises well above the 10\% chance level (dotted line) within the first
     20 rounds and plateaus in a 21--28\% band, while $\varepsilon$ grows
     steadily but stays within the $\varepsilon_{\max}=10$ budget throughout
-    --- a genuine privacy--utility tradeoff, in contrast to the flat,
+    a genuine privacy--utility tradeoff, in contrast to the flat,
     chance-level result the same experiment produced at the earlier,
     over-conservative $\sigma=6.6$ (quote box above).
   }
@@ -658,7 +658,7 @@ $\sigma$ (\texttt{python main.py --sweep}). Note that the sweep range
 hardcoded in \texttt{main.py} ($\sigma \in \{0.8, 1.0, 1.1, 1.3, 1.5,
 2.0\}$) predates the accounting corrections and now sits almost entirely
 \emph{below} the $\sigma \approx 2.11$ needed for a genuine
-$\varepsilon\le10$ guarantee in this 200-round, 20-UAV setting --- every
+$\varepsilon\le10$ guarantee in this 200-round, 20-UAV setting: every
 value in it except arguably the last would overspend the budget. The
 sweep is therefore a utility-vs-noise curve, not a privacy--utility
 Pareto frontier, until the range is re-centred on correctly-accounted
@@ -700,7 +700,7 @@ exactly (height 41 after round 40, i.e.\ one block per round with no stalls),
 1.18 updates are blocked per round on average, and \textbf{2000 tokens} are
 distributed in total rewards. Consistent with the intended incentive design,
 neither attacker ID (the Byzantine or the free-rider UAV) appears in the
-top-8 token leaderboard --- their norm-deficient or replayed updates are
+top-8 token leaderboard: their norm-deficient or replayed updates are
 caught by the detector within 1--2 rounds of participation, so honest
 high-effort UAVs accumulate rewards substantially faster over the run.
 
@@ -729,7 +729,7 @@ be confused with the DP privacy budget $\varepsilon$) fixed at $1.0$ for all
 30 rounds: \texttt{update()} only performs a gradient step (and only then
 decays $\varepsilon$-greedy) once each agent's replay buffer holds a full
 batch, and the batch size (32) exceeded the entire 30-round run length, so no
-learning or decay ever happened --- the agents were making uniformly random
+learning or decay ever happened: the agents were making uniformly random
 decisions the whole time. We fixed this by deriving both the buffer warm-up
 length and the decay rate from the configured round budget
 (\texttt{marl/trainer.py}), so short runs still reach the exploration floor
@@ -771,14 +771,14 @@ exploitation-dominant regime and participation recovers from its round-16
 trough. From round~23 onward, with participation locked near 95\%, reward is
 consistently slightly negative: $\Delta A$ has shrunk as accuracy plateaus
 (Section~8.1's plateau is visible here too), so the fixed per-epoch energy
-cost $0.005\,a_i$ dominates. This is the intended incentive structure ---
+cost $0.005\,a_i$ dominates. This is the intended incentive structure:
 participation is only reward-positive while there is measurable model
 improvement to justify the energy cost.
 
 \paragraph{Adaptive vs.\ static participation.}
 Participation is volatile while $\varepsilon$-greedy is high (15--90\% across
 rounds 5--20, including a trough of 15\% at round~16), reflecting genuinely
-exploratory --- effectively random --- action selection during that phase.
+exploratory (effectively random) action selection during that phase.
 Once $\varepsilon$-greedy drops below $\sim$0.15 around round~21, participation
 locks to 90--95\% and stays there through round~30: with the exploration floor
 reached, the learned policy consistently favours participating. This is a
@@ -793,7 +793,7 @@ Q-network weights are federated at rounds 10, 20, and 30. With the corrected
 warm-up (buffer fills at round~8 for this 30-round run, versus never filling
 under the original fixed batch size of 32), each agent has taken several
 gradient steps by the first federation event at round~10, and considerably
-more by rounds 20 and 30 --- consistent with the participation policy
+more by rounds 20 and 30, consistent with the participation policy
 visibly firming up into a consistent behaviour shortly after $\varepsilon$-greedy
 crosses below $\sim$0.15, rather than staying close to random for the whole run.
 
@@ -807,7 +807,7 @@ of $\varepsilon_{\max} = 10$. The
 growth rate visibly slows during the low-participation rounds (13--17) and
 steepens once participation locks near 95\% post-round~21, confirming that
 the MARL-driven participation variability translates directly into a variable
-privacy expenditure rate --- a property unavailable in static FL scheduling.
+privacy expenditure rate, a property unavailable in static FL scheduling.
 
 \subsection{Comparison to Published DP-FL Results on CIFAR-10}
 \label{sec:dpfl-comparison}
@@ -847,14 +847,14 @@ writing, and note it only as a qualitatively different approach worth
 tracking rather than a directly comparable number.
 
 With the correctly-calibrated $\sigma=2.11$, the gap to the published
-numbers is no longer explained by noise erasing the signal --- this run
+numbers is no longer explained by noise erasing the signal: this run
 genuinely learns. The remaining factors are the more ordinary ones a gap
 like this usually has:
 
 \begin{enumerate}
   \item \textbf{Model capacity.} \texttt{SimpleCNN} is a deliberately lightweight
   proxy model; DP-FedSAM's CIFAR-10 results use a ResNet-18 backbone, and
-  DP-FedPGN's use GNResNet-10 --- both an order of magnitude more parameters.
+  DP-FedPGN's use GNResNet-10, both an order of magnitude more parameters.
   Section~8.6's MobileNetV2 validation was aimed at exactly this gap but
   was run before the pooled-accounting fix (Section~8, Correction box) and
   needs re-validating at a correctly-calibrated $\sigma$ before its result
@@ -862,17 +862,17 @@ like this usually has:
   \item \textbf{Client pool size and communication budget.} DP-FedSAM trains
   300 rounds over a pool of 500 clients; this framework trains 200 rounds
   over 20 UAVs with only 11 channel-eligible per round
-  ($\gamma_{\min}=5$~dB, Section~8.1) --- an order of magnitude fewer clients
+  ($\gamma_{\min}=5$~dB, Section~8.1), an order of magnitude fewer clients
   contributing gradient signal per round, on a smaller and more non-IID
   effective cohort, on top of fewer rounds overall. Since each client's own
   accounting is independent (Section~8, Correction box), scaling up the
   simulated UAV count costs nothing in privacy terms and is the most direct
-  remaining lever to test --- queued as future work rather than run this
+  remaining lever to test, queued as future work rather than run this
   session given the time already spent re-validating the headline result.
 \end{enumerate}
 
-(The pipeline already applies standard CIFAR-10 augmentation --- random crop
-with 4px padding and horizontal flip, in \texttt{data/partition.py} --- so
+(The pipeline already applies standard CIFAR-10 augmentation, random crop
+with 4px padding and horizontal flip, in \texttt{data/partition.py}, so
 that is not a contributing factor.)
 
 \paragraph{Backbone choice under UAV hardware constraints.} Whether the
@@ -889,9 +889,9 @@ remains 5--10$\times$ heavier than \texttt{SimpleCNN}, and the added
 compute/energy draw would need to be reflected in the incentive layer's
 per-epoch cost terms and the MARL reward's energy penalty
 (Section~6), not merely swapped in as a drop-in replacement. A mobile-optimised
-backbone --- MobileNetV2/V3 or EfficientNet-Lite~\cite{sandler2018}, using
-depthwise-separable convolutions to hold parameter counts in the 2--5M range
---- was identified as the realistic middle ground on compute/energy grounds
+backbone (MobileNetV2/V3 or EfficientNet-Lite~\cite{sandler2018}, using
+depthwise-separable convolutions to hold parameter counts in the 2--5M range)
+was identified as the realistic middle ground on compute/energy grounds
 alone. We implemented and validated it (Section~8.6); the result is a
 cautionary one, not the accuracy improvement this paragraph originally
 anticipated.
@@ -907,7 +907,7 @@ fully disabled) does not depend on $\sigma$ and stands; whether it also
 fails to learn \emph{under DP} at the correct noise level is an open
 question, not the settled one this section originally reported.}
 
-\texttt{MobileNetV2CIFAR} (\texttt{models/mobilenet.py}) was implemented ---
+\texttt{MobileNetV2CIFAR} (\texttt{models/mobilenet.py}) was implemented:
 GroupNorm throughout in place of BatchNorm for the same \texttt{vmap}
 per-sample-gradient compatibility reason as \texttt{SimpleCNN}
 (Section~7), stem and first stage stride reduced from 2 to 1 for 32$\times$32
@@ -930,8 +930,8 @@ against \texttt{SimpleCNN}'s first 30 rounds from the same run family.
   \end{tabular}
 \end{table}
 
-MobileNetV2CIFAR does not learn at all under DP-FL at these hyperparameters
---- its accuracy sits at chance level (10\% on 10 classes) for the entire
+MobileNetV2CIFAR does not learn at all under DP-FL at these hyperparameters:
+its accuracy sits at chance level (10\% on 10 classes) for the entire
 run. This is not an implementation fault: the identical architecture, trained
 centrally with plain SGD and \emph{no} DP noise and \emph{no} federation,
 reaches 32.9\% test accuracy after only 300 minibatch steps (well under one
@@ -942,7 +942,7 @@ noise, scaled by $\sigma C$, to \emph{every} parameter each step; the total
 injected noise norm therefore scales with $\sqrt{\text{parameter count}}$,
 while the clipped gradient signal (bounded to norm $C$) does not grow with
 it. The $(\sigma=1.1,\ C=1.0)$ pair was never tuned for a 2.24M-parameter
-model --- it was carried over unchanged from \texttt{SimpleCNN}'s 0.62M
+model: it was carried over unchanged from \texttt{SimpleCNN}'s 0.62M
 parameters, roughly a $3.6\times$ increase in dimensionality the noise
 budget was never recalibrated against. Concretely, at $\approx3.6\times$ more
 parameters the injected noise norm is $\approx\sqrt{3.6}\approx1.9\times$
@@ -951,8 +951,8 @@ from this small, heavily-partitioned per-client dataset (an average of
 $\sim$2500 CIFAR-10 images per UAV, before any DP effect).
 
 This means the future-work item below is not "swap in MobileNetV2" but
-specifically \emph{re-tuning $(\sigma, C)$ --- or adopting a
-dimensionality-aware technique such as per-layer or adaptive clipping ---
+specifically \emph{re-tuning $(\sigma, C)$ (or adopting a
+dimensionality-aware technique such as per-layer or adaptive clipping)
 jointly with the backbone}, and re-validating before claiming any accuracy
 benefit. We report this as the honest outcome of the experiment run rather
 than reverting to the untested claim: a backbone swap under this framework's
@@ -969,14 +969,14 @@ fix (Section~8, Correction box) and was more conservative than a correct
 per-client guarantee requires (same bug as Section~8.1's
 $\sigma=6.6\to2.11$ correction). Unlike CIFAR-10 and EuroSAT, \textbf{this
 has since been re-validated at the correct $\sigma=1.94$ and the result
-does not reverse} --- AIDER still shows no learning above chance. See the
+does not reverse}: AIDER still shows no learning above chance. See the
 re-validation paragraph near the end of this section.}
 
 CIFAR-10 is a standard FL benchmark but not on-task imagery; the original
 future-work list called for validating on real UAV disaster imagery. FloodNet
 was the dataset originally named, but its Track~1 classification labels
 (``Flooded''/``Non-Flooded'') are distributed as an unlabelled Google Drive
-folder with only $\sim$400 labelled images total --- impractical to fetch
+folder with only $\sim$400 labelled images total, impractical to fetch
 automatically and too small to partition meaningfully across 20 UAVs. AIDER
 (Aerial Image dataset for Emergency Response, Kyrkou \& Theocharides, 2020)
 was used instead: 6433 real UAV images across five classes (fire, flooded
@@ -987,7 +987,7 @@ Wiring it in surfaced a real, pre-existing bug: \texttt{simulation/runner.py}
 called \texttt{load\_cifar10()} directly, so the \texttt{eurosat} and
 \texttt{custom} options already documented in \texttt{data/partition.py} and
 the README were dead code, never actually reachable regardless of the
-\texttt{data.dataset} config value. This is now fixed --- \texttt{runner.py}
+\texttt{data.dataset} config value. This is now fixed: \texttt{runner.py}
 calls the \texttt{load\_dataset()} dispatcher, and the model's output layer
 size is inferred from the dataset (\texttt{\_num\_classes()}) rather than
 hardcoded to 10, so \texttt{eurosat} and the new \texttt{aider} option are
@@ -995,7 +995,7 @@ both now actually usable, not just documented.
 
 \paragraph{A misleading-metric finding.} AIDER's \texttt{normal} class is
 68\% of the data. At the CIFAR-tuned hyperparameters (batch size 32), round~1
-reported 68.1\% accuracy and the run auto-declared convergence --- but this
+reported 68.1\% accuracy and the run auto-declared convergence, but this
 is an artefact, not learning: a model predicting ``normal'' for everything
 scores $\approx$68\% for free. We added a balanced-accuracy metric
 (\texttt{FLServer.evaluate\_balanced()}, mean per-class recall) that a
@@ -1004,21 +1004,21 @@ majority-class collapse cannot game, alongside the existing raw accuracy.
 \paragraph{A privacy-budget finding.} AIDER's clients hold far fewer samples
 than CIFAR's ($\sim$257 vs.\ $\sim$2500 average per UAV), so the same
 batch size of 32 is a much higher DP-SGD sampling rate, and $\varepsilon$
-reached 9.05 of the 10.0 budget after a single round --- reducing
+reached 9.05 of the 10.0 budget after a single round: reducing
 \texttt{local\_batch\_size} to 4 brought this qualitative problem under
 control (batch 32 exhausted the budget almost immediately; batch 4 did
 not). The specific $\varepsilon$ figures quoted for this diagnostic run
 (2.17 at round~1, growing to 4.64 by round~10) predate the accounting fix
 in Section~8 and understate the true cost by roughly the same order of
-magnitude documented there; the qualitative finding --- smaller batches
-reduce sampling-rate-driven budget exhaustion --- is unaffected, since it
+magnitude documented there; the qualitative finding (smaller batches
+reduce sampling-rate-driven budget exhaustion) is unaffected, since it
 compares two runs under the \emph{same} (buggy, at the time) accounting,
 not an absolute number.
 
 \paragraph{The remaining problem.} Even with both fixes, the model does not
 learn. Table~\ref{tab:aider-diagnosis} shows raw accuracy oscillating wildly
 (8.6\% to 67.5\%) while balanced accuracy stays flat at 15--26\% for all 10
-rounds --- essentially the 20\% chance level for 5 classes, with no upward
+rounds, essentially the 20\% chance level for 5 classes, with no upward
 trend. The raw-accuracy swings are the model flipping in and out of a
 majority-class collapse, not genuine progress; balanced accuracy shows there
 is none.
@@ -1056,10 +1056,10 @@ original behaviour, so CIFAR-10's reported results are unaffected). At
 class.
 
 \paragraph{Result at $\sigma=5.0$ (since known to be over-conservative).}
-A 30-round run with the fix applied (batch size~4, $\sigma=5.0$ --- found
+A 30-round run with the fix applied (batch size~4, $\sigma=5.0$, found
 by binary search against the then-current, Bug-2-affected accountant) did
 not show genuine learning: balanced accuracy is 20.3\% at round~1, 16.7\%
-at round~10, 17.8\% at round~20, and 21.2\% at round~30 --- flat around
+at round~10, 17.8\% at round~20, and 21.2\% at round~30, flat around
 the 20\% chance level for 5 classes, while raw accuracy climbs from 7.8\%
 to 47.4\% over the same rounds (the same majority-class drift balanced
 accuracy exists to catch, not real progress). Given Section~8.1's reversal
@@ -1071,30 +1071,30 @@ as superseded rather than settled. A shorter check at the \emph{original},
 even-more-permissive noise level ($\sigma=1.1$, no accounting fix at all)
 did show balanced accuracy rising (23.9\% $\to$ 26.0\% over the first 10
 rounds) before its (badly undercounted) $\varepsilon$ exhausted budget at
-round~10 --- consistent with the stratification fix genuinely helping once
+round~10, consistent with the stratification fix genuinely helping once
 enough signal survives the noise, which is now the live, re-opened
 question for this dataset rather than a closed one.
 
 The "cohort too small to learn under real privacy" framing this section
 previously shared with Sections~8.1 and~8.6 turned out to be an artefact
 of the pooled-accounting bug (Section~8, Correction box), not a finding
-about this framework's limits in general --- but, unlike CIFAR-10, it is
+about this framework's limits in general; but, unlike CIFAR-10, it is
 not resolved for AIDER specifically.
 
 \paragraph{Re-validation at the correct $\sigma$.} AIDER's worst-case
 client (smallest partition after stratification, batch size~4, 5 local
-epochs) has only 61 samples --- the correct $\sigma$ for a genuine
+epochs) has only 61 samples: the correct $\sigma$ for a genuine
 per-client $\varepsilon\le10$ guarantee over 30 rounds at this scale,
 binary-searched the same way as Section~8.1's $\sigma=2.11$, is
 $\sigma\approx1.94$, close to CIFAR-10's value despite the very different
 dataset. A 30-round re-run at $\sigma=1.94$ (Figure~\ref{fig:aider-correct})
 still does \emph{not} show real learning: balanced accuracy is 20.4\% at
 round~1, 14.9\% at round~10, 21.6\% at round~20, and 22.7\% at round~30
-(mean 19.9\% across all four checkpoints) --- statistically indistinguishable
+(mean 19.9\% across all four checkpoints), statistically indistinguishable
 from the 20\% chance level for 5 classes, with no consistent trend. Raw
 accuracy continues to swing wildly (44.4\%, 19.3\%, 61.5\%, 42.8\%), the
 same majority-class-collapse signature as before. Final $\varepsilon=5.22$,
-comfortably within budget --- so, as with the other datasets, this is not
+comfortably within budget. As with the other datasets, this is not
 a budget-exhaustion artefact.
 
 \begin{figure}[H]
@@ -1112,7 +1112,7 @@ a budget-exhaustion artefact.
 
 This makes AIDER the one dataset in this report where the "cohort too
 small" framing does \emph{not} turn out to be purely an accounting
-artefact --- at a genuine $\varepsilon\le10$ budget, something else is
+artefact: at a genuine $\varepsilon\le10$ budget, something else is
 still suppressing learning. The two most likely remaining candidates,
 both already implicated earlier in this section, are AIDER's severe class
 imbalance (the majority ``normal'' class at 68\% of the data) and its very
@@ -1142,7 +1142,7 @@ per-step mechanism the paper's Theorem~1 describes: each minibatch's
 "was this gradient under the clip threshold" bit is noised and released
 alongside the existing gradient-sum noise, riding the same subsampled
 query rather than issuing a separate one, so the accountant still composes
-at the nominal noise multiplier with no extra privacy cost --- confirmed
+at the nominal noise multiplier with no extra privacy cost, confirmed
 directly rather than assumed: an initial design that instead released the
 signal once per round, as its own independent (non-subsampled) mechanism,
 was checked against \texttt{RDPAccountant} and found to add
@@ -1151,7 +1151,7 @@ release gets none of DP-SGD's usual subsampling amplification.
 
 Getting a stable update rate took a second correction. The paper's own
 default learning rate ($\eta_C=0.2$) updates $C$ once per \emph{round},
-aggregated over $\sim$100 clients --- good signal-to-noise ratio per
+aggregated over $\sim$100 clients: good signal-to-noise ratio per
 update. Applying the same rate once per \emph{minibatch} (this framework's
 granularity; $\sim$390 updates/round for a typical CIFAR-10 client) let
 per-step noise dominate: $C$ hit its ceiling within the first round and
@@ -1164,14 +1164,14 @@ on real CIFAR-10 data before being used in a full run.
 CIFAR-10 validation (otherwise identical to Section~8.1's configuration at
 the time, $\sigma=6.6$) showed no improvement over fixed clipping: 8.3\%,
 9.9\%, 12.8\%, 10.1\% at rounds 1/10/20/30, against the fixed-clipping
-baseline's 9.5\%, 10.3\%, 10.9\%, 11.3\% at the same rounds --- both
+baseline's 9.5\%, 10.3\%, 10.9\%, 11.3\% at the same rounds, both
 oscillating in the same chance-level band. As a \emph{controlled}
 comparison (both arms run at the identical, if since-corrected, $\sigma$),
 this remains valid evidence that adaptive clipping did not help
 \emph{at that specific, now-known-to-be-wrong noise level}. What it does
 \emph{not} establish, because the premise under it has changed
 (Section~8, Correction box): that $\sigma=6.6$ is the noise a genuine
-$\varepsilon\le10$ guarantee requires at this cohort size. It is not ---
+$\varepsilon\le10$ guarantee requires at this cohort size. It is not:
 $\sigma\approx2.11$ is, and at that level Section~8.1 already learns on
 its own. Whether adaptive clipping adds anything further on top of a
 correctly-calibrated $\sigma=2.11$ baseline is the real open question this
@@ -1186,7 +1186,7 @@ participants" conclusion previously drawn here.
 was found to be considerably more conservative than a correct per-client
 guarantee requires. We keep the original finding (the signal that rises
 then fades) as reported at the time, then give the re-validated result at
-the correct $\sigma=2.17$ below it --- which, like CIFAR-10, reverses the
+the correct $\sigma=2.17$ below it, which, like CIFAR-10, reverses the
 conclusion.}
 
 EuroSAT (10-class satellite/aerial land-cover, $32\times32$ after resize,
@@ -1228,13 +1228,13 @@ participant-mix drift were both plausible) and left it as an open question.
 
 \paragraph{Re-validation at the correct $\sigma$.} The correct $\sigma$ for
 EuroSAT's worst-case client (389 samples, batch size~32, 5 local epochs,
-30-round budget) is $\sigma\approx2.17$ --- binary-searched the same way as
+30-round budget) is $\sigma\approx2.17$: binary-searched the same way as
 Section~8.1's $\sigma=2.11$ and AIDER's $\sigma=1.94$ above, and landing in
 the same narrow band despite three very different datasets. A 30-round
 re-run at $\sigma=2.17$ (Figure~\ref{fig:eurosat-correct}) resolves the
 open question definitively: balanced accuracy rises
-\emph{monotonically} across all four checkpoints --- 14.0\%, 27.2\%,
-29.5\%, 36.2\% at rounds~1/10/20/30 --- with no fade. Final raw accuracy
+\emph{monotonically} across all four checkpoints (14.0\%, 27.2\%,
+29.5\%, 36.2\% at rounds~1/10/20/30) with no fade. Final raw accuracy
 36.9\%, final $\varepsilon=4.43$, within budget. The round~20--30 decay in
 the original $\sigma=8.2$ run was the accounting bug, not a property of
 EuroSAT or this framework: at a noise level roughly $3.8\times$ higher
@@ -1246,7 +1246,7 @@ strongest learning result of any dataset in this report (36.2\% balanced
 accuracy vs.\ CIFAR-10's 23.6\%/28.2\% and AIDER's $\sim$20\%, chance
 levels of 10\%/10\%/20\% respectively), plausibly because EuroSAT's aerial
 land-cover classes are a more linearly-separable feature space than
-CIFAR-10's natural images or AIDER's imbalanced disaster imagery --- a
+CIFAR-10's natural images or AIDER's imbalanced disaster imagery: a
 hypothesis consistent with, but not proven by, this single result.
 
 \begin{figure}[H]
@@ -1257,7 +1257,7 @@ hypothesis consistent with, but not proven by, this single result.
     $\varepsilon$ (bottom) over 30 rounds at the correctly-calibrated
     $\sigma=2.17$. Unlike the original $\sigma=8.2$ run (Table~\ref{tab:eurosat}),
     balanced accuracy rises monotonically with no fade, reaching 36.2\% by
-    round~30 --- well above the 10\% chance level (dotted line) and the
+    round~30, well above the 10\% chance level (dotted line) and the
     strongest result of any dataset tested in this report.
   }
   \label{fig:eurosat-correct}
@@ -1282,29 +1282,29 @@ under a genuine, correctly-accounted per-client $\varepsilon\le10$
 differential-privacy guarantee: 23.6\% final (28.2\% peak) test accuracy on
 CIFAR-10 over 200 rounds at $\sigma=2.11$, with $\varepsilon=6.45$ spent
 (Section~8.1). Reaching that number required finding and fixing two
-independent privacy-accounting bugs --- one undercounting DP-SGD steps by
+independent privacy-accounting bugs (one undercounting DP-SGD steps by
 $\approx$78$\times$, one pooling all clients' privacy costs into a single
-shared budget --- documented in full in Section~8's Correction box. The
+shared budget), documented in full in Section~8's Correction box. The
 second of these had, in an intermediate version of this report, produced a
 confident but incorrect conclusion that the framework's UAV-scale cohort
 was simply too small to learn under real privacy constraints. It is not;
 that finding was an artefact of the bug. We report this history explicitly
 rather than silently publishing the final number, both because the
-intermediate conclusion was circulated and because the failure mode ---
+intermediate conclusion was circulated and because the failure mode (
 an over-conservative $\sigma$ derived from a plausible-looking but wrong
-accountant, producing results that look like a clean scientific negative
---- is an easy one to repeat.
+accountant, producing results that look like a clean scientific negative)
+is an easy one to repeat.
 
 \paragraph{Future work.}
 (i)~\textbf{Re-validate Sections~8.6 and~8.8 at correctly-calibrated
 $\sigma$.} Of the four sections originally run at Bug-2-affected,
 over-conservative $\sigma$ values, two are now done: AIDER (Section~8.7,
 $\sigma=1.94$) and EuroSAT (Section~8.9, $\sigma=2.17$) have been
-re-validated, with opposite outcomes --- EuroSAT reverses to a clean 36.2\%
+re-validated, with opposite outcomes: EuroSAT reverses to a clean 36.2\%
 learning curve, AIDER does not and remains at chance. MobileNetV2
 (Section~8.6) and adaptive clipping (Section~8.8) remain outstanding.
 Each needs its own correct $\sigma$ re-derived (the value is
-setting-specific --- it depends on client count, batch size, local epochs
+setting-specific: it depends on client count, batch size, local epochs
 and round budget, though all four datasets re-derived so far land in a
 narrow 1.9--2.2 band) and the experiment re-run before their conclusions
 can be trusted. For adaptive clipping specifically, the live question is
@@ -1314,11 +1314,11 @@ $\sigma=2.11$ baseline, not whether it rescues a chance-level result;
 own merits: more clients contributing gradient signal per round should
 improve the aggregate signal-to-noise ratio, and since each client's
 accounting is now independent (Section~8, Correction box), scaling the
-simulated UAV count costs nothing in privacy terms --- it is a config
+simulated UAV count costs nothing in privacy terms: it is a config
 change (\texttt{uav\_network.num\_uavs}), not a hardware constraint as
 previously stated here;
 (i-c)~\textbf{Diagnose AIDER's remaining failure.} Re-validation ruled out
-noise miscalibration as AIDER's problem (Section~8.7) --- it is the one
+noise miscalibration as AIDER's problem (Section~8.7): it is the one
 dataset in this report where correcting $\sigma$ did not change the
 outcome. The two live candidates are severe class imbalance (68\% majority
 class) and a very small worst-case client (61 samples, an order of
@@ -1332,7 +1332,7 @@ allocation (WP2 interface);
 (v)~explore multi-task MARL where agents jointly optimise sensing, routing, and FL
 participation in a unified policy;
 (vi)~class-weighted loss for AIDER, as a complement to the stratified
-partitioning already implemented (Section~8.7) --- now the main open lever
+partitioning already implemented (Section~8.7), now the main open lever
 for AIDER specifically (item~(i-c)), since re-validation at correct
 $\sigma$ (this item's original premise) is done and did not resolve it on
 its own.

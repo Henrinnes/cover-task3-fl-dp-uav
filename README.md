@@ -1,4 +1,4 @@
-# COVER Task 3.2 — Secure, Privacy-Preserved and Incentive-Based Data Sharing in UAV Networks
+# COVER Task 3.2: Secure, Privacy-Preserved and Incentive-Based Data Sharing in UAV Networks
 
 **EU Horizon MSCA Staff Exchanges | Grant 101086228 | Lead: Georg-August-Universität Göttingen**
 
@@ -16,13 +16,13 @@ over 200 rounds at σ=2.11, spending ε=6.45. Getting to that number required
 finding and fixing two independent accounting bugs, in sequence:
 
 1. **Step undercounting.** The RDP accountant was credited with the local
-   *epoch* count instead of the actual noisy-minibatch-step count — ~78×
-   fewer steps than really taken for a typical CIFAR-10 client — so reported
+   *epoch* count instead of the actual noisy-minibatch-step count (~78×
+   fewer steps than really taken for a typical CIFAR-10 client), so reported
    ε understated the true cost by ~20–30×. (Fixed in
    `federated_learning/client.py` + the three `accumulate()` call sites.)
 2. **Pooled accounting.** A *single shared* `RDPAccountant` received every
    client's cost, pooling independent clients into one budget that grows
-   with population size — which has nothing to do with any one client's
+   with population size, which has nothing to do with any one client's
    actual privacy loss. (Fixed: each client now has its own accountant;
    `max_client_epsilon` reports the worst case across them, not a sum.)
 
@@ -30,18 +30,18 @@ Bug 2 matters beyond bookkeeping: it made σ=6.6 look necessary when a real
 per-client ε≤10 guarantee only needs **σ≈2.11**. At the over-conservative
 σ=6.6 the model sat at chance (~10%), and an intermediate version of this
 report concluded the UAV-scale cohort was simply too small to learn under
-real privacy. **That conclusion was wrong** — an artefact of the bug, now
+real privacy. **That conclusion was wrong**: an artefact of the bug, now
 corrected throughout.
 
-⚠️ **Two of four re-validated — opposite outcomes.** AIDER and EuroSAT
+⚠️ **Two of four re-validated: opposite outcomes.** AIDER and EuroSAT
 (report Sections 8.7, 8.9) have now been re-run at their own
 correctly-calibrated per-client σ (1.94 and 2.17 respectively, both
 landing in the same narrow band as CIFAR-10's 2.11 despite very different
 datasets). **EuroSAT reverses**, same as CIFAR-10: its earlier rise-then-
-fade becomes a clean monotonic rise to 36.2% balanced accuracy — the
+fade becomes a clean monotonic rise to 36.2% balanced accuracy, the
 strongest result of any dataset in this report. **AIDER does not
 reverse**: it stays at chance (~20% balanced accuracy, 5 classes) even
-with correct accounting — the one dataset where noise miscalibration
+with correct accounting, the one dataset where noise miscalibration
 wasn't the problem; its severe class imbalance and tiny worst-case client
 (61 samples) are now the live suspects. MobileNetV2 and adaptive clipping
 (Sections 8.6, 8.8) remain un-re-validated at Bug-2-affected σ values;
@@ -63,11 +63,11 @@ develops cooperative, intelligent UAV systems for emergency response (flooding, 
 
 | Sub-task | Mechanism | Status |
 |---|---|---|
-| A — Security | Blockchain (PoA) + Byzantine/Sybil defences | Implemented |
-| B — Incentives | Stackelberg game + Proof-of-Resource-Sharing | Implemented |
-| C — Differential Privacy | DP-SGD (vmap) + RDP accountant | Implemented |
-| D — Federated Learning | FedAvg + 3D convergence analysis | Implemented |
-| E — Agentic Framework | MARL: DQN agents + federated Q-learning | Implemented |
+| A: Security | Blockchain (PoA) + Byzantine/Sybil defences | Implemented |
+| B: Incentives | Stackelberg game + Proof-of-Resource-Sharing | Implemented |
+| C: Differential Privacy | DP-SGD (vmap) + RDP accountant | Implemented |
+| D: Federated Learning | FedAvg + 3D convergence analysis | Implemented |
+| E: Agentic Framework | MARL: DQN agents + federated Q-learning | Implemented |
 
 ---
 
@@ -105,12 +105,12 @@ pip install -r fl_dp_uav/requirements.txt
 ```
 
 Python 3.9+, PyTorch ≥ 2.0. Two setups have actually been tested:
-- **3× NVIDIA GTX 1070 Ti** (x86_64, 8GB VRAM each, CUDA 11.8) — the setup
+- **3× NVIDIA GTX 1070 Ti** (x86_64, 8GB VRAM each, CUDA 11.8): the setup
   originally targeted; exercises the multi-GPU round-robin path.
 - **NVIDIA GB10** (DGX Spark-class, aarch64, Grace Blackwell, ~131GB unified
-  memory) — what every result currently in `report/cover_task32_report.pdf`
+  memory): what every result currently in `report/cover_task32_report.pdf`
   was actually produced on (PyTorch 2.14+cu130; the `cu118` wheel above
-  doesn't target aarch64/Blackwell — install the matching wheel for your
+  doesn't target aarch64/Blackwell; install the matching wheel for your
   platform from [pytorch.org](https://pytorch.org/get-started/locally/)
   instead). Single-GPU, so the round-robin path wasn't exercised.
 
@@ -121,7 +121,7 @@ Python 3.9+, PyTorch ≥ 2.0. Two setups have actually been tested:
 ```bash
 cd fl_dp_uav
 
-# Full simulation — all 4 sub-tasks, uses all GPUs
+# Full simulation: all 4 sub-tasks, uses all GPUs
 python main.py --full
 
 # FL + DP only (faster; good for privacy-accuracy sweep)
@@ -151,11 +151,11 @@ Key parameters and their research significance:
 | Parameter | Default | Effect |
 |---|---|---|
 | `fl.num_rounds` | 200 | Communication rounds budget |
-| `dp.noise_multiplier` (σ) | 2.11 | Privacy–accuracy tradeoff: ↑σ = more private, less accurate. 2.11 is the minimum σ giving a genuine **per-client** ε≤10 guarantee over 200 rounds at this batch size / local-epoch count — see the corrections above. The correct value is setting-specific (depends on client count, batch size, epochs, rounds); re-derive it if you change those |
+| `dp.noise_multiplier` (σ) | 2.11 | Privacy–accuracy tradeoff: ↑σ = more private, less accurate. 2.11 is the minimum σ giving a genuine **per-client** ε≤10 guarantee over 200 rounds at this batch size / local-epoch count; see the corrections above. The correct value is setting-specific (depends on client count, batch size, epochs, rounds); re-derive it if you change those |
 | `dp.max_grad_norm` (C) | 1.0 | Gradient clipping threshold; bounds sensitivity |
 | `dp.target_epsilon` | 10.0 | Stops training if ε budget exceeded |
-| `dp.adaptive_clipping` | false | Tracks `max_grad_norm` toward the gradient-norm quantile instead of leaving it fixed (Andrew et al., 2021). Mechanism implemented and verified correct; showed no improvement when tested at the (since-superseded) σ=6.6, and has **not** been re-tested against the now-learning σ=2.11 baseline — see report Section 8.8 |
-| `model.backbone` | simplecnn | `simplecnn` (~0.6M params) or `mobilenetv2` (~2.2M params, GroupNorm); `mobilenetv2` failed to learn when tested — including with DP fully disabled, so at least partly architectural rather than noise-driven — but that test predates the σ correction and is queued for re-validation — see report Section 8.6 |
+| `dp.adaptive_clipping` | false | Tracks `max_grad_norm` toward the gradient-norm quantile instead of leaving it fixed (Andrew et al., 2021). Mechanism implemented and verified correct; showed no improvement when tested at the (since-superseded) σ=6.6, and has **not** been re-tested against the now-learning σ=2.11 baseline; see report Section 8.8 |
+| `model.backbone` | simplecnn | `simplecnn` (~0.6M params) or `mobilenetv2` (~2.2M params, GroupNorm); `mobilenetv2` failed to learn when tested, including with DP fully disabled (so at least partly architectural rather than noise-driven), but that test predates the σ correction and is queued for re-validation; see report Section 8.6 |
 | `data.dirichlet_alpha` | 0.5 | Non-IID degree: ↓α = more heterogeneous UAV data |
 | `channel.rician_k` | 10 dB | A2A channel quality: ↑K = stronger LoS |
 | `power.min_snr_db` | 5 dB | Minimum SNR for UAV to participate |
@@ -168,16 +168,16 @@ Key parameters and their research significance:
 ## Datasets
 
 `runner.py` previously called the CIFAR-10 loader directly regardless of
-`data.dataset`, so `eurosat`/`custom` were dead code — fixed this session
+`data.dataset`, so `eurosat`/`custom` were dead code, fixed this session
 (now dispatches via `data.load_dataset()`, with the model's output layer
 sized from the dataset instead of hardcoded to 10 classes).
 
 | Dataset | Relevance | Status | Download |
 |---|---|---|---|---|
 | **CIFAR-10** | Standard FL benchmark | ✅ Experiments run (see report) | Automatic |
-| **EuroSAT** | Aerial/satellite land-cover (10 classes, 64×64) | ✅ Re-validated at correctly-calibrated σ=2.17 — **reverses**: clean monotonic rise to 36.2% balanced accuracy over 30 rounds, the strongest result of any dataset in this report (report Section 8.9) | Automatic — set `data.dataset: eurosat` |
-| **AIDER** | Real UAV disaster imagery, 5 classes (fire, flood, collapsed building, traffic incident, normal) | ⚠️ Stratified partitioning implemented and verified (fixes the zero-class problem, `data.min_per_class`); re-validated at correctly-calibrated σ=1.94 but **does not reverse** — stays at chance (~20% balanced accuracy) even with correct per-client accounting. Root cause narrowed to class imbalance (68% majority class) and a tiny worst-case client (61 samples), not noise miscalibration (report Section 8.7) | [Zenodo](https://zenodo.org/record/3888300), 263MB — set `data.dataset: aider` |
-| **FloodNet** | UAV flood disaster imagery | ❌ Not used — Track 1 labels are a ~400-image Google Drive folder, impractical to automate and too small to partition across 20 clients | [GitHub](https://github.com/BinaLab/FloodNet-Challenge-EARTHVISION2021) (manual) |
+| **EuroSAT** | Aerial/satellite land-cover (10 classes, 64×64) | ✅ Re-validated at correctly-calibrated σ=2.17, **reverses**: clean monotonic rise to 36.2% balanced accuracy over 30 rounds, the strongest result of any dataset in this report (report Section 8.9) | Automatic; set `data.dataset: eurosat` |
+| **AIDER** | Real UAV disaster imagery, 5 classes (fire, flood, collapsed building, traffic incident, normal) | ⚠️ Stratified partitioning implemented and verified (fixes the zero-class problem, `data.min_per_class`); re-validated at correctly-calibrated σ=1.94 but **does not reverse**: stays at chance (~20% balanced accuracy) even with correct per-client accounting. Root cause narrowed to class imbalance (68% majority class) and a tiny worst-case client (61 samples), not noise miscalibration (report Section 8.7) | [Zenodo](https://zenodo.org/record/3888300), 263MB; set `data.dataset: aider` |
+| **FloodNet** | UAV flood disaster imagery | ❌ Not used: Track 1 labels are a ~400-image Google Drive folder, impractical to automate and too small to partition across 20 clients | [GitHub](https://github.com/BinaLab/FloodNet-Challenge-EARTHVISION2021) (manual) |
 
 For AIDER: download `AIDER.zip` from the Zenodo link above and extract into
 `data/aider/`, producing `data/aider/AIDER/<class>/*.jpg`.
@@ -230,7 +230,7 @@ free-riders automatically.
 
 [`report/cover_task32_report.pdf`](report/cover_task32_report.pdf) is the
 source of truth for actual experimental numbers, figures, and honest
-writeups of what worked and what didn't — this README describes the
+writeups of what worked and what didn't; this README describes the
 framework's capabilities and config, not results. It includes:
 
 - Both privacy-accounting corrections (Section 8, "Correction" box) and the
@@ -242,12 +242,12 @@ framework's capabilities and config, not results. It includes:
 - Four experiments originally run at the over-conservative σ (Sections
   8.6–8.9); two are now re-validated at their own correct per-client σ,
   with opposite outcomes (Section 8, "Correction" box): **EuroSAT
-  reverses** — a clean monotonic rise to **36.2% balanced accuracy**, the
+  reverses**: a clean monotonic rise to **36.2% balanced accuracy**, the
   strongest result of any dataset in this report (Section 8.9); **AIDER
-  does not reverse** — it stays at chance even with correct accounting,
+  does not reverse**: it stays at chance even with correct accounting,
   ruling out noise miscalibration and narrowing its real problem to class
   imbalance and a 61-sample worst-case client (Section 8.7; its zero-class
-  partitioning problem was separately diagnosed and fixed — 9/20 clients
+  partitioning problem was separately diagnosed and fixed: 9/20 clients
   missing a class → 0/20). MobileNetV2 and adaptive clipping remain
   outstanding: MobileNetV2 fails to learn *even with DP fully disabled* (a
   real architectural finding, σ-independent, Section 8.6); adaptive
@@ -261,7 +261,7 @@ framework's capabilities and config, not results. It includes:
   numbers independently verified against each paper's primary source
   (Section 8.5)
 - The bibliography is now a proper `.bib` file (`report/references.bib`)
-  instead of a manual list — verifying each entry while converting it
+  instead of a manual list, verifying each entry while converting it
   caught two more unverifiable citations sitting in an older, never-checked
   part of the report (the same class of issue as an earlier fabricated
   citation this session already caught and fixed in Section 8.5) plus a
@@ -272,7 +272,7 @@ framework's capabilities and config, not results. It includes:
 ## References
 
 Full bibliography: [`report/references.bib`](report/references.bib) (15
-entries, each independently verified against its primary source — see the
+entries, each independently verified against its primary source; see the
 note above). Key ones:
 
 1. McMahan et al. (2017), "Communication-Efficient Learning of Deep Networks from Decentralized Data." AISTATS.
