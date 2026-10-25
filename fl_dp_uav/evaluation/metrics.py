@@ -30,7 +30,7 @@ def plot_convergence(results_path: str, output_dir: str = "./results", show: boo
 
     rounds = data["rounds"]
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-    fig.suptitle("COVER Task 3.2 — FL + DP in UAV Network", fontsize=13, fontweight="bold")
+    fig.suptitle("COVER Task 3.2: FL + DP in UAV Network", fontsize=13, fontweight="bold")
 
     ax = axes[0, 0]
     ax.plot(rounds, data["accuracies"], "b-o", markersize=3, label="Test accuracy")
@@ -141,7 +141,7 @@ def plot_full_results(
 
     fig, axes = plt.subplots(2, 3, figsize=(16, 9))
     fig.suptitle(
-        "COVER Task 3.2 — Full Simulation: FL + DP + Blockchain + Incentive + Security",
+        "COVER Task 3.2 Full Simulation: FL + DP + Blockchain + Incentive + Security",
         fontsize=12, fontweight="bold",
     )
 

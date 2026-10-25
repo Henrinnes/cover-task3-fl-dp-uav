@@ -40,7 +40,7 @@ def plot_marl_results(
 
     fig, axes = plt.subplots(2, 2, figsize=(13, 8))
     fig.suptitle(
-        "COVER Task 3.2 — MARL + Federated Learning\n"
+        "COVER Task 3.2: MARL + Federated Learning\n"
         "Autonomous UAV Participation with DQN + Federated Q-Learning",
         fontsize=12, fontweight="bold",
     )
