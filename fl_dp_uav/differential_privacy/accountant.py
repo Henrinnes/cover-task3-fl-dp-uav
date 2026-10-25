@@ -116,6 +116,50 @@ class RDPAccountant:
         self._history.clear()
 
 
+def calibrate_sigma(
+    num_samples: int,
+    batch_size: int,
+    local_epochs: int,
+    max_rounds: int,
+    target_epsilon: float,
+    target_delta: float,
+    sigma_bounds: Tuple[float, float] = (0.05, 50.0),
+    tolerance: float = 1e-3,
+) -> float:
+    """
+    Binary-search the smallest noise_multiplier giving this client its own
+    (target_epsilon, target_delta)-DP guarantee if it participates in every
+    one of `max_rounds` rounds (the worst case for that client specifically).
+
+    Each client's required noise depends only on its own sample_rate
+    (batch_size / num_samples) and step count, not on any other client's
+    data size -- so a client with more samples can get a tighter (smaller)
+    sigma than one with fewer, while every client still independently
+    clears the same target_epsilon. This is what a single global sigma
+    (chosen for the population's worst-case client) gives up: every larger
+    client is forced into noise calibrated for the smallest one.
+    """
+    sample_rate = batch_size / max(num_samples, 1)
+    steps_per_round = local_epochs * max(1, num_samples // batch_size)
+    total_steps = steps_per_round * max_rounds
+
+    def epsilon_at(sigma: float) -> float:
+        acc = RDPAccountant()
+        acc.accumulate(noise_multiplier=sigma, sample_rate=sample_rate, num_steps=total_steps)
+        return acc.get_epsilon(target_delta)
+
+    lo, hi = sigma_bounds
+    if epsilon_at(hi) > target_epsilon:
+        return hi  # even the loosest bound can't reach budget; caller should widen it
+    while hi - lo > tolerance:
+        mid = (lo + hi) / 2.0
+        if epsilon_at(mid) > target_epsilon:
+            lo = mid
+        else:
+            hi = mid
+    return hi
+
+
 def max_client_epsilon(accountants: "dict[int, RDPAccountant]", delta: float) -> float:
     """
     Worst-case (binding) epsilon across a population of per-client

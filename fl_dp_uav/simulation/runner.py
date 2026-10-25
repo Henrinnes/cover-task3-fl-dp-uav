@@ -25,7 +25,7 @@ import yaml
 from torch.utils.data import DataLoader, Subset
 
 from data.partition import dirichlet_partition, load_dataset
-from differential_privacy.accountant import RDPAccountant, max_client_epsilon
+from differential_privacy.accountant import RDPAccountant, calibrate_sigma, max_client_epsilon
 from federated_learning.client import FLClient
 from federated_learning.convergence import ConvergenceTracker
 from federated_learning.server import FLServer
@@ -126,6 +126,31 @@ class SimulationRunner:
         # Server lives on the primary (GPU 0)
         self.server = FLServer(global_model, device=self.primary_device)
 
+        # Per-client sigma (adaptive_sigma): a single global noise_multiplier
+        # is calibrated to the population's worst-case (smallest) client, so
+        # every larger client trains at noise it doesn't need to meet its own
+        # target_epsilon -- each client already has an independent accountant
+        # (see client_accountants below), so nothing stops each one from
+        # using the smallest sigma ITS OWN sample count allows. Disabled by
+        # default (every client gets dp_cfg["noise_multiplier"], identical to
+        # pre-existing behaviour); enable with dp.adaptive_sigma: true.
+        if dp_cfg.get("adaptive_sigma", False):
+            self.client_sigmas: Dict[int, float] = {
+                i: calibrate_sigma(
+                    num_samples=len(client_datasets[i]),
+                    batch_size=fl_cfg["local_batch_size"],
+                    local_epochs=fl_cfg["local_epochs"],
+                    max_rounds=fl_cfg["num_rounds"],
+                    target_epsilon=dp_cfg["target_epsilon"],
+                    target_delta=dp_cfg["target_delta"],
+                )
+                for i in range(self.network.num_uavs)
+            }
+        else:
+            self.client_sigmas = {
+                i: dp_cfg["noise_multiplier"] for i in range(self.network.num_uavs)
+            }
+
         # Distribute clients round-robin across all GPUs
         self.clients: List[FLClient] = [
             FLClient(
@@ -137,7 +162,7 @@ class SimulationRunner:
                 batch_size=fl_cfg["local_batch_size"],
                 dp_enabled=dp_cfg["enabled"],
                 max_grad_norm=dp_cfg["max_grad_norm"],
-                noise_multiplier=dp_cfg["noise_multiplier"],
+                noise_multiplier=self.client_sigmas[i],
                 device=self.gpu_devices[i % len(self.gpu_devices)],
                 adaptive_clipping=dp_cfg.get("adaptive_clipping", False),
                 target_quantile=dp_cfg.get("target_quantile", 0.5),
@@ -212,7 +237,7 @@ class SimulationRunner:
                 # nominal call, so no separate accounting is needed (see
                 # FLClient).
                 self.client_accountants[cid].accumulate(
-                    noise_multiplier=dp_cfg["noise_multiplier"],
+                    noise_multiplier=self.client_sigmas[cid],
                     sample_rate=self.clients[cid].sample_rate,
                     num_steps=self.clients[cid].last_num_steps,
                 )
@@ -250,7 +275,11 @@ class SimulationRunner:
         print(f"  UAVs          : {self.network.num_uavs}")
         print(f"  FL rounds     : {self.num_rounds}")
         print(f"  GPUs in use   : {gpu_summary}")
-        print(f"  DP            : σ={dp_cfg['noise_multiplier']}, C={dp_cfg['max_grad_norm']}")
+        if dp_cfg.get("adaptive_sigma", False):
+            sigmas = sorted(self.client_sigmas.values())
+            print(f"  DP            : σ∈[{sigmas[0]:.3f}, {sigmas[-1]:.3f}] (adaptive, per-client), C={dp_cfg['max_grad_norm']}")
+        else:
+            print(f"  DP            : σ={dp_cfg['noise_multiplier']}, C={dp_cfg['max_grad_norm']}")
         print(f"  Target ε      : {dp_cfg.get('target_epsilon', '—')}")
         # Show which client IDs land on which GPU
         for gidx, gdev in enumerate(self.gpu_devices):
@@ -271,14 +300,20 @@ class SimulationRunner:
 
             if rnd % self.log_interval == 0 or rnd == 1:
                 loss, acc = self.server.evaluate(self.test_loader)
+                # Balanced accuracy (mean per-class recall): plain accuracy is
+                # gameable by a majority-class collapse on an imbalanced
+                # dataset (e.g. AIDER, 68% "normal") -- always computed, not
+                # just for AIDER, since it costs one extra evaluation pass
+                # and silently reveals the same collapse on any dataset.
+                bal_acc = self.server.evaluate_balanced(self.test_loader, self.num_classes)
                 eps = (
                     max_client_epsilon(self.client_accountants, dp_cfg["target_delta"])
                     if dp_cfg["enabled"] else 0.0
                 )
-                self.tracker.record(rnd, loss, acc, eps, len(selected))
+                self.tracker.record(rnd, loss, acc, eps, len(selected), balanced_accuracy=bal_acc)
                 print(
                     f"  Round {rnd:4d} | loss={loss:.4f} | acc={acc:.4f} | "
-                    f"ε={eps:6.2f} | participants={len(selected)}"
+                    f"bal_acc={bal_acc:.4f} | ε={eps:6.2f} | participants={len(selected)}"
                 )
                 if dp_cfg["enabled"] and eps > dp_cfg.get("target_epsilon", float("inf")):
                     print(f"\n  Privacy budget exhausted (ε={eps:.2f}). Stopping.")
@@ -290,6 +325,7 @@ class SimulationRunner:
         print("\n" + "=" * 65)
         print(f"  Convergence round : {summary['convergence_round']}")
         print(f"  Final accuracy    : {summary['final_accuracy']:.4f}")
+        print(f"  Final bal. acc.   : {summary['final_balanced_accuracy']:.4f}")
         print(f"  Final ε           : {summary['final_epsilon']:.2f}")
         print("=" * 65)
         return summary

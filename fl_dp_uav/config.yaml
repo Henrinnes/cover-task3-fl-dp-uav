@@ -43,9 +43,22 @@ dp:
   # learning entirely. NOTE: the correct value is setting-specific -- it
   # depends on client count, batch size, local epochs and round budget --
   # so re-derive it if you change any of those.
-  noise_multiplier: 2.11      # σ — trades accuracy for privacy
+  noise_multiplier: 2.11      # σ — trades accuracy for privacy. Used as-is
+                               # for every client when adaptive_sigma (below)
+                               # is false; ignored (per-client sigma derived
+                               # instead) when it's true.
   target_epsilon: 10.0        # stop if ε budget exceeded
   target_delta: 1.0e-5        # δ for (ε, δ)-DP guarantee
+
+  # Per-client adaptive sigma: off by default (every client uses
+  # noise_multiplier above, unchanged behaviour). noise_multiplier is
+  # calibrated to the worst-case (smallest) client's sample count, so
+  # every larger client trains at noise far beyond what its own target
+  # epsilon requires: each client already has an independent accountant
+  # (see Section 8 Correction box), so nothing stops each one using the
+  # smallest sigma its own sample count allows instead of one shared,
+  # worst-case value. See differential_privacy/accountant.py::calibrate_sigma.
+  adaptive_sigma: false
 
   # Adaptive clipping (Andrew et al., 2021) — off by default (no behaviour
   # change unless enabled). Tracks max_grad_norm toward target_quantile of
