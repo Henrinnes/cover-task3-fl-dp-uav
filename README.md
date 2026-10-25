@@ -33,11 +33,21 @@ report concluded the UAV-scale cohort was simply too small to learn under
 real privacy. **That conclusion was wrong** — an artefact of the bug, now
 corrected throughout.
 
-⚠️ **Not yet re-validated:** the MobileNetV2, AIDER, adaptive-clipping and
-EuroSAT experiments (report Sections 8.6–8.9) were all run at
-Bug-2-affected σ values. Their σ-independent findings stand; anything
-attributing failure to "noise at this cohort size" is an open question
-pending re-run. This is the top future-work item.
+⚠️ **Two of four re-validated — opposite outcomes.** AIDER and EuroSAT
+(report Sections 8.7, 8.9) have now been re-run at their own
+correctly-calibrated per-client σ (1.94 and 2.17 respectively, both
+landing in the same narrow band as CIFAR-10's 2.11 despite very different
+datasets). **EuroSAT reverses**, same as CIFAR-10: its earlier rise-then-
+fade becomes a clean monotonic rise to 36.2% balanced accuracy — the
+strongest result of any dataset in this report. **AIDER does not
+reverse**: it stays at chance (~20% balanced accuracy, 5 classes) even
+with correct accounting — the one dataset where noise miscalibration
+wasn't the problem; its severe class imbalance and tiny worst-case client
+(61 samples) are now the live suspects. MobileNetV2 and adaptive clipping
+(Sections 8.6, 8.8) remain un-re-validated at Bug-2-affected σ values;
+their σ-independent findings stand, but anything attributing failure to
+"noise at this cohort size" there is still open. Re-validating those two
+and diagnosing AIDER's remaining failure are the top future-work items.
 
 See `report/cover_task32_report.pdf` (Section 8, "Correction" box) for the
 full writeup and diagnostic numbers.
@@ -165,8 +175,8 @@ sized from the dataset instead of hardcoded to 10 classes).
 | Dataset | Relevance | Status | Download |
 |---|---|---|---|---|
 | **CIFAR-10** | Standard FL benchmark | ✅ Experiments run (see report) | Automatic |
-| **EuroSAT** | Aerial/satellite land-cover (10 classes, 64×64) | ⚠️ Loader fixed and usable; no experiment run yet | Automatic — set `data.dataset: eurosat` |
-| **AIDER** | Real UAV disaster imagery, 5 classes (fire, flood, collapsed building, traffic incident, normal) | ⚠️ Stratified partitioning implemented and verified (fixes the zero-class problem, `data.min_per_class`), but **still does not converge** at a correctly-accounted ε≤10 budget — same root cause as CIFAR-10/MobileNetV2: noise needed for real privacy at this cohort size overwhelms the signal (report Section 8.7) | [Zenodo](https://zenodo.org/record/3888300), 263MB — set `data.dataset: aider` |
+| **EuroSAT** | Aerial/satellite land-cover (10 classes, 64×64) | ✅ Re-validated at correctly-calibrated σ=2.17 — **reverses**: clean monotonic rise to 36.2% balanced accuracy over 30 rounds, the strongest result of any dataset in this report (report Section 8.9) | Automatic — set `data.dataset: eurosat` |
+| **AIDER** | Real UAV disaster imagery, 5 classes (fire, flood, collapsed building, traffic incident, normal) | ⚠️ Stratified partitioning implemented and verified (fixes the zero-class problem, `data.min_per_class`); re-validated at correctly-calibrated σ=1.94 but **does not reverse** — stays at chance (~20% balanced accuracy) even with correct per-client accounting. Root cause narrowed to class imbalance (68% majority class) and a tiny worst-case client (61 samples), not noise miscalibration (report Section 8.7) | [Zenodo](https://zenodo.org/record/3888300), 263MB — set `data.dataset: aider` |
 | **FloodNet** | UAV flood disaster imagery | ❌ Not used — Track 1 labels are a ~400-image Google Drive folder, impractical to automate and too small to partition across 20 clients | [GitHub](https://github.com/BinaLab/FloodNet-Challenge-EARTHVISION2021) (manual) |
 
 For AIDER: download `AIDER.zip` from the Zenodo link above and extract into
@@ -229,18 +239,24 @@ framework's capabilities and config, not results. It includes:
 - A PoA consensus deadlock found and fixed (Section 8.3), with before/after
   blockchain behaviour
 - An MARL exploration-decay bug found and fixed (Section 8.4)
-- Four experiments run at the over-conservative σ, each with findings worth
-  keeping but conclusions now partly re-opened (Sections 8.6–8.9):
-  MobileNetV2 fails to learn *even with DP fully disabled* (a real
-  architectural finding, σ-independent); AIDER's zero-class partitioning
-  problem was diagnosed and fixed (9/20 clients missing a class → 0/20);
-  adaptive clipping (Andrew et al., 2021) was implemented with two design
-  mistakes caught via the accountant/real training rather than assumed (an
-  initial "separate mechanism" design added ~150% ε overhead; the paper's
-  own learning rate destabilised training applied per-minibatch instead of
-  per-round); EuroSAT showed a real early signal that then decayed. What
-  these do *not* establish any more is the "cohort too small to learn"
-  conclusion they were previously read as supporting — see the caveat above
+- Four experiments originally run at the over-conservative σ (Sections
+  8.6–8.9); two are now re-validated at their own correct per-client σ,
+  with opposite outcomes (Section 8, "Correction" box): **EuroSAT
+  reverses** — a clean monotonic rise to **36.2% balanced accuracy**, the
+  strongest result of any dataset in this report (Section 8.9); **AIDER
+  does not reverse** — it stays at chance even with correct accounting,
+  ruling out noise miscalibration and narrowing its real problem to class
+  imbalance and a 61-sample worst-case client (Section 8.7; its zero-class
+  partitioning problem was separately diagnosed and fixed — 9/20 clients
+  missing a class → 0/20). MobileNetV2 and adaptive clipping remain
+  outstanding: MobileNetV2 fails to learn *even with DP fully disabled* (a
+  real architectural finding, σ-independent, Section 8.6); adaptive
+  clipping (Andrew et al., 2021) was implemented with two design mistakes
+  caught via the accountant/real training rather than assumed (an initial
+  "separate mechanism" design added ~150% ε overhead; the paper's own
+  learning rate destabilised training applied per-minibatch instead of
+  per-round), but whether it helps on top of the now-learning σ=2.11
+  baseline is still untested (Section 8.8)
 - A literature comparison against published DP-FL results, built only from
   numbers independently verified against each paper's primary source
   (Section 8.5)
