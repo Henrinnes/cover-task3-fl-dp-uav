@@ -140,7 +140,12 @@ def calibrate_sigma(
     client is forced into noise calibrated for the smallest one.
     """
     sample_rate = batch_size / max(num_samples, 1)
-    steps_per_round = local_epochs * max(1, num_samples // batch_size)
+    # Matches FLClient's DataLoader (drop_last=False): a trailing partial
+    # batch is still one more noisy release, so batches/epoch is a ceiling
+    # division, not floor -- using floor here would undercount steps the
+    # same way Bug 1 (Section 8 Correction box) once did, just smaller.
+    batches_per_epoch = -(-num_samples // batch_size)  # ceil division
+    steps_per_round = local_epochs * max(1, batches_per_epoch)
     total_steps = steps_per_round * max_rounds
 
     def epsilon_at(sigma: float) -> float:
