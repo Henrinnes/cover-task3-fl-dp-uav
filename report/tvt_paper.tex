@@ -633,6 +633,19 @@ with the non-IID partition itself, motivating class-weighted loss
 rather than further noise-calibration work as the next step for this
 dataset.
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{aider_correct_sigma.pdf}
+\caption{AIDER balanced accuracy (top) and cumulative privacy budget
+$\varepsilon$ (bottom) over 30 rounds at the correctly-calibrated
+$\sigma=1.94$. Unlike CIFAR-10 and EuroSAT at their own correct
+$\sigma$, balanced accuracy never departs meaningfully from the 20\%
+chance level (dotted line) for 5 classes; the adaptive-$\sigma$ run
+(not plotted, see Section~\ref{sec:results}) is visually
+indistinguishable from this curve.}
+\label{fig:aider}
+\end{figure}
+
 \subsection{Comparison to Published DP-FL Results}
 Table~\ref{tab:comparison} places this work's CIFAR-10 results against
 two recent client-level DP-FL papers. Adaptive calibration roughly
@@ -659,17 +672,41 @@ This work, uniform $\sigma$ & 20 UAVs & 17.3\%$\pm$3.9 \\
 \end{table}
 
 \subsection{Blockchain, Incentive, and MARL Results}
-A 40-round full-stack simulation (all layers active) shows the
-blockchain layer correctly tracking one block per round with no
-stalls, 2000 tokens distributed consistent with the Stackelberg
+A 40-round full-stack simulation (all layers active, Fig.~\ref{fig:fullstack})
+shows the blockchain layer correctly tracking one block per round with
+no stalls, 2000 tokens distributed consistent with the Stackelberg
 equilibrium effort levels, and both the injected Byzantine and
 free-rider attackers excluded from the top-8 token leaderboard within
-1--2 rounds of participation. In the MARL layer, each UAV's
-participation policy, initially volatile during DQN exploration
-(15--90\% participation), locks to 90--95\% once the exploration floor
-is reached, with the cumulative privacy budget's growth rate tracking
+1--2 rounds of participation.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{full_simulation_results.pdf}
+\caption{Full-stack simulation (FL + DP + blockchain + incentive +
+security), 40 rounds, 20 UAVs. Clockwise from top-left: global
+accuracy, cumulative DP-$\varepsilon$, channel-aware participation,
+top-8 token leaderboard, Byzantine/free-rider detections per round, and
+the Stackelberg equilibrium $\lambda^\star$.}
+\label{fig:fullstack}
+\end{figure}
+
+In the MARL layer (Fig.~\ref{fig:marl}), each UAV's participation
+policy, initially volatile during DQN exploration (15--90\%
+participation), locks to 90--95\% once the exploration floor is
+reached, with the cumulative privacy budget's growth rate tracking
 this participation variability directly, a property unavailable to
 static, non-learned participation scheduling.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{marl_results.pdf}
+\caption{MARL + federated learning results over 30 rounds (20 UAVs,
+all layers active). Top-left: global accuracy under DP-SGD
+($\sigma=1.1$). Top-right: mean per-UAV DQN reward. Bottom-left:
+adaptive participation rate vs.\ the static 60\% baseline.
+Bottom-right: cumulative DP-$\varepsilon$.}
+\label{fig:marl}
+\end{figure}
 
 \section{Discussion and Limitations}
 \label{sec:discussion}
