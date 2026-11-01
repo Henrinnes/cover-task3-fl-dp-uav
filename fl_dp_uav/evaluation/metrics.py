@@ -5,7 +5,7 @@ All plots are saved as PDF for publication quality.
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -80,6 +80,44 @@ def compare_dp_vs_nodp(
     out = f"{output_dir}/dp_vs_nodp.pdf"
     plt.savefig(out, dpi=150, bbox_inches="tight")
     print(f"Saved → {out}")
+    if show:
+        plt.show()
+    return fig
+
+
+def compare_uniform_vs_adaptive_sigma(
+    uniform_path: str,
+    adaptive_path: str,
+    uniform_sigma: float,
+    adaptive_sigma_range: Tuple[float, float],
+    title: str,
+    output_dir: str = "./results",
+    show: bool = False,
+):
+    """
+    Overlay balanced accuracy for a uniform-sigma run against the same
+    experiment using per-client adaptive sigma, both at a genuinely valid
+    per-client target_epsilon guarantee. Both inputs are convergence_results.json
+    files from the same dataset/round budget/seed, differing only in
+    dp.adaptive_sigma.
+    """
+    uni = _load(uniform_path)
+    ada = _load(adaptive_path)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(uni["rounds"], uni["balanced_accuracies"], "o-", color="firebrick",
+             markersize=4, label=f"Uniform sigma={uniform_sigma:.2f}")
+    ax.plot(ada["rounds"], ada["balanced_accuracies"], "o-", color="steelblue",
+             markersize=4, label=f"Adaptive sigma in [{adaptive_sigma_range[0]:.2f}, {adaptive_sigma_range[1]:.2f}]")
+    ax.set_xlabel("Communication round")
+    ax.set_ylabel("Balanced accuracy")
+    ax.set_title(title)
+    ax.legend()
+    plt.tight_layout()
+    out = f"{output_dir}/uniform_vs_adaptive_sigma.pdf"
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    print(f"Saved -> {out}")
     if show:
         plt.show()
     return fig

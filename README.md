@@ -8,12 +8,19 @@
 
 ---
 
-## Headline result, and two privacy-accounting corrections
+## Headline result: uniform noise fails, per-client adaptive noise rescues it
 
-**The framework learns under a genuine, correctly-accounted per-client
-(ε≤10)-DP guarantee**: 23.6% final / 28.2% peak test accuracy on CIFAR-10
-over 200 rounds at σ=2.11, spending ε=6.45. Getting to that number required
-finding and fixing two independent accounting bugs, in sequence:
+**A single global noise level, calibrated to the smallest client in a
+heterogeneous UAV fleet, is the wrong way to add differential privacy to
+small-cohort federated learning.** At a genuinely valid per-client
+(ε≤10)-DP guarantee, standard uniform-σ DP-SGD on CIFAR-10 barely learns:
+**17.3% ± 3.9** mean final accuracy across 5 seeds, 200 rounds, often
+indistinguishable from the 10% chance level. A new per-client adaptive
+noise calibration mechanism, holding an **identical** formal guarantee,
+raises this to **30.7% ± 6.6**, a +13.4 percentage-point improvement,
+confirmed on EuroSAT too (+16.3pp across 3 seeds, winning all 3). Getting
+to a baseline worth measuring that improvement against required finding
+and fixing three layered accounting bugs, in sequence:
 
 1. **Step undercounting.** The RDP accountant was credited with the local
    *epoch* count instead of the actual noisy-minibatch-step count (~78×
@@ -25,32 +32,42 @@ finding and fixing two independent accounting bugs, in sequence:
    with population size, which has nothing to do with any one client's
    actual privacy loss. (Fixed: each client now has its own accountant;
    `max_client_epsilon` reports the worst case across them, not a sum.)
+3. **Wrong worst-case client.** `SimulationRunner.__init__` builds the UAV
+   network, mobility model, and channel, consuming random draws, *before*
+   partitioning the dataset. The headline σ=2.11 figure in earlier versions
+   of this README/report was derived by a script that partitioned the
+   dataset directly, skipping that RNG consumption, so it computed the
+   worst-case client against a different, more lenient partition than the
+   real simulation produces. The true worst-case CIFAR-10 client (seed 42)
+   has 1125 samples; at σ=2.11 that client's real ε over 200 rounds is
+   ≈16.0, not ≤10 as claimed. **The old headline number (23.6% final /
+   28.2% peak) was never a genuine per-client ε≤10 guarantee.** The
+   corrected minimum is σ≈3.08 (seed-dependent, see `calibrate_sigma` in
+   `differential_privacy/accountant.py`).
 
-Bug 2 matters beyond bookkeeping: it made σ=6.6 look necessary when a real
-per-client ε≤10 guarantee only needs **σ≈2.11**. At the over-conservative
-σ=6.6 the model sat at chance (~10%), and an intermediate version of this
-report concluded the UAV-scale cohort was simply too small to learn under
-real privacy. **That conclusion was wrong**: an artefact of the bug, now
-corrected throughout.
+Bugs 1 and 2 each produced a confident but wrong intermediate conclusion
+(first "the cohort is too small to learn", then "σ=2.11 is a valid
+guarantee") that later turned out to be an artefact, not a finding. We
+keep this history explicit rather than silently publishing the final
+numbers, because the failure mode, a plausible-looking but wrong
+accountant producing a result that reads as a clean finding, is easy to
+repeat, and on this project's own evidence, easy to repeat more than once.
 
-⚠️ **Two of four re-validated: opposite outcomes.** AIDER and EuroSAT
-(report Sections 8.7, 8.9) have now been re-run at their own
-correctly-calibrated per-client σ (1.94 and 2.17 respectively, both
-landing in the same narrow band as CIFAR-10's 2.11 despite very different
-datasets). **EuroSAT reverses**, same as CIFAR-10: its earlier rise-then-
-fade becomes a clean monotonic rise to 36.2% balanced accuracy, the
-strongest result of any dataset in this report. **AIDER does not
-reverse**: it stays at chance (~20% balanced accuracy, 5 classes) even
-with correct accounting, the one dataset where noise miscalibration
-wasn't the problem; its severe class imbalance and tiny worst-case client
-(61 samples) are now the live suspects. MobileNetV2 and adaptive clipping
-(Sections 8.6, 8.8) remain un-re-validated at Bug-2-affected σ values;
-their σ-independent findings stand, but anything attributing failure to
-"noise at this cohort size" there is still open. Re-validating those two
-and diagnosing AIDER's remaining failure are the top future-work items.
+**Per-client adaptive noise calibration** (`dp.adaptive_sigma`, off by
+default) is the direct response to Bug 3: since each client already has
+its own independent accountant, there's no reason every client must use
+the *same* σ, calibrated to the population's single smallest client. A
+client with more samples has a lower DP-SGD sampling rate and can use
+proportionally less noise while clearing the identical ε≤10 target. It
+does **not** rescue every dataset: tested on AIDER, it makes no
+difference (~20% balanced accuracy either way, chance level for 5
+classes), which rules out noise magnitude as AIDER's bottleneck and
+narrows its real problem to class imbalance and its very small worst-case
+client (61 samples).
 
-See `report/cover_task32_report.pdf` (Section 8, "Correction" box) for the
-full writeup and diagnostic numbers.
+See `report/cover_task32_report.pdf` (Section 8, "Correction" box, and
+Section 8.2, "Per-Client Adaptive Noise Calibration") for the full
+writeup, all 5+3 seed results, and diagnostic numbers.
 
 ---
 
@@ -151,11 +168,12 @@ Key parameters and their research significance:
 | Parameter | Default | Effect |
 |---|---|---|
 | `fl.num_rounds` | 200 | Communication rounds budget |
-| `dp.noise_multiplier` (σ) | 2.11 | Privacy–accuracy tradeoff: ↑σ = more private, less accurate. 2.11 is the minimum σ giving a genuine **per-client** ε≤10 guarantee over 200 rounds at this batch size / local-epoch count; see the corrections above. The correct value is setting-specific (depends on client count, batch size, epochs, rounds); re-derive it if you change those |
+| `dp.noise_multiplier` (σ) | 3.08 | Privacy–accuracy tradeoff: ↑σ = more private, less accurate. 3.08 is the minimum σ giving the true worst-case client a genuine **per-client** ε≤10 guarantee over 200 rounds at this batch size / local-epoch count, for seed 42's partition; see the corrections above (Bug 3). The correct value is seed- and setting-specific (depends on the RNG seed, client count, batch size, epochs, rounds); re-derive it with `calibrate_sigma` if you change any of those |
+| `dp.adaptive_sigma` | false | Per-client noise calibration instead of one shared σ: each client gets the smallest σ its own sample count allows, at an identical formal guarantee. Confirmed to substantially improve accuracy on CIFAR-10 (+13.4pp mean, 5 seeds) and EuroSAT (+16.3pp mean, 3 seeds); does **not** help on AIDER; see report Section 8.2 |
 | `dp.max_grad_norm` (C) | 1.0 | Gradient clipping threshold; bounds sensitivity |
 | `dp.target_epsilon` | 10.0 | Stops training if ε budget exceeded |
-| `dp.adaptive_clipping` | false | Tracks `max_grad_norm` toward the gradient-norm quantile instead of leaving it fixed (Andrew et al., 2021). Mechanism implemented and verified correct; showed no improvement when tested at the (since-superseded) σ=6.6, and has **not** been re-tested against the now-learning σ=2.11 baseline; see report Section 8.8 |
-| `model.backbone` | simplecnn | `simplecnn` (~0.6M params) or `mobilenetv2` (~2.2M params, GroupNorm); `mobilenetv2` failed to learn when tested, including with DP fully disabled (so at least partly architectural rather than noise-driven), but that test predates the σ correction and is queued for re-validation; see report Section 8.6 |
+| `dp.adaptive_clipping` | false | Tracks `max_grad_norm` toward the gradient-norm quantile instead of leaving it fixed (Andrew et al., 2021). Mechanism implemented and verified correct; showed no improvement when tested at the (since-superseded) σ=6.6, and has **not** been re-tested against the now-corrected σ=3.08 uniform baseline or against adaptive σ; see report Section 8.8 |
+| `model.backbone` | simplecnn | `simplecnn` (~0.6M params) or `mobilenetv2` (~2.2M params, GroupNorm); `mobilenetv2` fails to learn under DP-SGD regardless of σ (checked against the true worst-case client, still fails), including with DP fully disabled, so at least partly architectural rather than noise-driven; see report Section 8.6 |
 | `data.dirichlet_alpha` | 0.5 | Non-IID degree: ↓α = more heterogeneous UAV data |
 | `channel.rician_k` | 10 dB | A2A channel quality: ↑K = stronger LoS |
 | `power.min_snr_db` | 5 dB | Minimum SNR for UAV to participate |
@@ -175,8 +193,8 @@ sized from the dataset instead of hardcoded to 10 classes).
 | Dataset | Relevance | Status | Download |
 |---|---|---|---|---|
 | **CIFAR-10** | Standard FL benchmark | ✅ Experiments run (see report) | Automatic |
-| **EuroSAT** | Aerial/satellite land-cover (10 classes, 64×64) | ✅ Re-validated at correctly-calibrated σ=2.17, **reverses**: clean monotonic rise to 36.2% balanced accuracy over 30 rounds, the strongest result of any dataset in this report (report Section 8.9) | Automatic; set `data.dataset: eurosat` |
-| **AIDER** | Real UAV disaster imagery, 5 classes (fire, flood, collapsed building, traffic incident, normal) | ⚠️ Stratified partitioning implemented and verified (fixes the zero-class problem, `data.min_per_class`); re-validated at correctly-calibrated σ=1.94 but **does not reverse**: stays at chance (~20% balanced accuracy) even with correct per-client accounting. Root cause narrowed to class imbalance (68% majority class) and a tiny worst-case client (61 samples), not noise miscalibration (report Section 8.7) | [Zenodo](https://zenodo.org/record/3888300), 263MB; set `data.dataset: aider` |
+| **EuroSAT** | Aerial/satellite land-cover (10 classes, 64×64) | ✅ Strongest result in the report: uniform σ=2.17 gives 38.2%±8.3 mean final balanced accuracy (3 seeds); **adaptive per-client σ raises this to 54.5%±4.8** (+16.3pp mean, wins all 3 seeds) (report Sections 8.9, 8.2) | Automatic; set `data.dataset: eurosat` |
+| **AIDER** | Real UAV disaster imagery, 5 classes (fire, flood, collapsed building, traffic incident, normal) | ⚠️ Stratified partitioning implemented and verified (fixes the zero-class problem, `data.min_per_class`); stays at chance (~20% balanced accuracy) under both uniform **and** adaptive per-client σ, ruling out noise calibration as the cause. Root cause narrowed to class imbalance (68% majority class) and a tiny worst-case client (61 samples) (report Sections 8.7, 8.2) | [Zenodo](https://zenodo.org/record/3888300), 263MB; set `data.dataset: aider` |
 | **FloodNet** | UAV flood disaster imagery | ❌ Not used: Track 1 labels are a ~400-image Google Drive folder, impractical to automate and too small to partition across 20 clients | [GitHub](https://github.com/BinaLab/FloodNet-Challenge-EARTHVISION2021) (manual) |
 
 For AIDER: download `AIDER.zip` from the Zenodo link above and extract into
@@ -233,30 +251,34 @@ source of truth for actual experimental numbers, figures, and honest
 writeups of what worked and what didn't; this README describes the
 framework's capabilities and config, not results. It includes:
 
-- Both privacy-accounting corrections (Section 8, "Correction" box) and the
-  real CIFAR-10 outcome under a genuinely correct per-client ε≤10 budget:
-  **23.6% final / 28.2% peak**, a real learning curve (Section 8.1)
+- Three privacy-accounting corrections (Section 8, "Correction" box),
+  the third (wrong worst-case client) invalidating the CIFAR-10 headline
+  number an earlier version of this report and README quoted; the
+  corrected, genuinely valid result is **17.3%±3.9 mean final accuracy
+  (uniform σ, 5 seeds)**, raised to **30.7%±6.6 (adaptive per-client σ,
+  5 seeds)**, a +13.4pp improvement at an identical formal guarantee
+  (Sections 8.1, 8.2)
 - A PoA consensus deadlock found and fixed (Section 8.3), with before/after
   blockchain behaviour
 - An MARL exploration-decay bug found and fixed (Section 8.4)
-- Four experiments originally run at the over-conservative σ (Sections
-  8.6–8.9); two are now re-validated at their own correct per-client σ,
-  with opposite outcomes (Section 8, "Correction" box): **EuroSAT
-  reverses**: a clean monotonic rise to **36.2% balanced accuracy**, the
-  strongest result of any dataset in this report (Section 8.9); **AIDER
-  does not reverse**: it stays at chance even with correct accounting,
-  ruling out noise miscalibration and narrowing its real problem to class
-  imbalance and a 61-sample worst-case client (Section 8.7; its zero-class
-  partitioning problem was separately diagnosed and fixed: 9/20 clients
-  missing a class → 0/20). MobileNetV2 and adaptive clipping remain
-  outstanding: MobileNetV2 fails to learn *even with DP fully disabled* (a
-  real architectural finding, σ-independent, Section 8.6); adaptive
-  clipping (Andrew et al., 2021) was implemented with two design mistakes
-  caught via the accountant/real training rather than assumed (an initial
-  "separate mechanism" design added ~150% ε overhead; the paper's own
-  learning rate destabilised training applied per-minibatch instead of
-  per-round), but whether it helps on top of the now-learning σ=2.11
-  baseline is still untested (Section 8.8)
+- **Per-client adaptive noise calibration** (Section 8.2, new): replaces
+  one shared σ calibrated to the population's smallest client with a
+  per-client σ, each client using the least noise its own sample count
+  allows at an identical formal guarantee. Confirmed on CIFAR-10 (+13.4pp
+  mean, 5 seeds, wins 4 of 5) and EuroSAT (+16.3pp mean, 3 seeds, wins all
+  3); does **not** help on AIDER, which rules out noise magnitude as that
+  dataset's problem and narrows it to class imbalance and a 61-sample
+  worst-case client (Section 8.7)
+- MobileNetV2 and adaptive clipping: MobileNetV2 fails to learn *even
+  with DP fully disabled* (a real architectural finding, σ-independent,
+  checked against the true worst-case client and still holds, Section
+  8.6); adaptive clipping (Andrew et al., 2021) was implemented with two
+  design mistakes caught via the accountant/real training rather than
+  assumed (an initial "separate mechanism" design added ~150% ε overhead;
+  the paper's own learning rate destabilised training applied
+  per-minibatch instead of per-round), but whether it helps on top of the
+  now-corrected σ=3.08 uniform baseline, or on top of adaptive σ, is still
+  untested (Section 8.8)
 - A literature comparison against published DP-FL results, built only from
   numbers independently verified against each paper's primary source
   (Section 8.5)

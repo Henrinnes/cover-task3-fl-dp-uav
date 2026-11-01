@@ -28,25 +28,30 @@ fl:
 dp:
   enabled: true
   max_grad_norm: 1.0          # gradient clipping threshold C
-  # Two accounting bugs were fixed before arriving at this value (see the
+  # Three accounting bugs were fixed before arriving at this value (see the
   # report's Section 8 "Correction" box):
   #   1. the accountant was credited with num_steps=local_epochs instead of
   #      the true minibatch step count (epochs * batches/epoch), under-
   #      counting composition by ~1-2 orders of magnitude;
   #   2. a single shared RDPAccountant pooled ALL clients' costs into one
-  #      budget, inflating reported eps with population size.
-  # With both fixed, 2.11 is the smallest sigma (binary-searched against the
-  # corrected accountant) giving a genuine PER-CLIENT eps<=10 guarantee over
-  # 200 rounds at this batch_size/local_epochs -- worst case being a client
-  # that participates in every single round. An intermediate version used
-  # 6.6, derived under bug 2; that was ~3x too conservative and suppressed
-  # learning entirely. NOTE: the correct value is setting-specific -- it
-  # depends on client count, batch size, local epochs and round budget --
-  # so re-derive it if you change any of those.
-  noise_multiplier: 2.11      # σ — trades accuracy for privacy. Used as-is
-                               # for every client when adaptive_sigma (below)
-                               # is false; ignored (per-client sigma derived
-                               # instead) when it's true.
+  #      budget, inflating reported eps with population size;
+  #   3. the worst-case client used to derive this value was computed by a
+  #      script that skipped the RNG draws SimulationRunner.__init__ makes
+  #      (network/mobility/channel setup) before partitioning the dataset,
+  #      so it assumed a smaller, more lenient worst-case client than the
+  #      real pipeline actually produces. An earlier value of 2.11 gave the
+  #      TRUE worst-case client (seed 42: 1125 samples) eps~16, not <=10.
+  # With all three fixed, 3.08 is the smallest sigma (binary-searched via
+  # calibrate_sigma, differential_privacy/accountant.py) giving the TRUE
+  # worst-case client a genuine PER-CLIENT eps<=10 guarantee over 200 rounds
+  # at this batch_size/local_epochs, assuming it participates every round.
+  # NOTE: the correct value is seed- and setting-specific; re-derive it with
+  # calibrate_sigma if you change the seed, client count, batch size, local
+  # epochs, or round budget.
+  noise_multiplier: 3.08      # sigma: trades accuracy for privacy. Used
+                               # as-is for every client when adaptive_sigma
+                               # (below) is false; ignored (per-client sigma
+                               # derived instead) when it's true.
   target_epsilon: 10.0        # stop if ε budget exceeded
   target_delta: 1.0e-5        # δ for (ε, δ)-DP guarantee
 
@@ -57,28 +62,31 @@ dp:
   # epsilon requires: each client already has an independent accountant
   # (see Section 8 Correction box), so nothing stops each one using the
   # smallest sigma its own sample count allows instead of one shared,
-  # worst-case value. See differential_privacy/accountant.py::calibrate_sigma.
+  # worst-case value. Confirmed to substantially improve accuracy on
+  # CIFAR-10 (+13.4pp mean, 5 seeds) and EuroSAT (+16.3pp mean, 3 seeds)
+  # at an identical formal guarantee; does NOT help on AIDER (report
+  # Section 8.2). See differential_privacy/accountant.py::calibrate_sigma.
   adaptive_sigma: false
 
-  # Adaptive clipping (Andrew et al., 2021) — off by default (no behaviour
+  # Adaptive clipping (Andrew et al., 2021): off by default (no behaviour
   # change unless enabled). Tracks max_grad_norm toward target_quantile of
   # the per-sample gradient-norm distribution instead of leaving it fixed,
   # via a joint per-step release (Theorem 1) that rides the existing
   # subsampled DP-SGD query rather than a separate one, so it costs nothing
-  # extra to account for -- the accountant still composes at
+  # extra to account for, the accountant still composes at
   # noise_multiplier above unchanged. See report Section 8.8 and
   # federated_learning/client.py for the derivation.
   adaptive_clipping: false
-  target_quantile: 0.5          # γ — track the median gradient norm
-  # η_C: the paper's own default (0.2) updates C once per ROUND, aggregated
-  # over ~100 clients -- good SNR per update. Applying the joint mechanism
+  target_quantile: 0.5          # gamma: track the median gradient norm
+  # eta_C: the paper's own default (0.2) updates C once per ROUND, aggregated
+  # over ~100 clients, good SNR per update. Applying the joint mechanism
   # per-step (this framework's per-example DP-SGD; ~78 batches/epoch x 5
   # epochs = ~390 updates/round for a typical CIFAR client) means each
   # single update sees far more relative noise, so 0.2 sends clip_norm to
   # clip_max within the first round and destabilises training (verified).
   # 0.001 lets ~390 noisy per-step nudges average out over a round instead
-  # of any single one dominating -- confirmed stable on real CIFAR-10 data.
-  clip_lr: 0.001                # η_C — geometric step size per minibatch step
+  # of any single one dominating, confirmed stable on real CIFAR-10 data.
+  clip_lr: 0.001                # eta_C: geometric step size per minibatch step
   # Must be > noise_multiplier/2 (Theorem 1's split requires it; raises a
   # clear error otherwise). 10.0 comfortably clears both sigma=6.6 (CIFAR)
   # and sigma=5.0 (AIDER) with margin; re-check if noise_multiplier changes.
