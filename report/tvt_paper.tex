@@ -172,15 +172,22 @@ cosine-similarity-based Sybil detection \cite{fung2018} are standard
 defences against adversarial or duplicated clients; we adopt both as
 the security layer of the integrated stack (Section~\ref{sec:system}).
 
-\textbf{UAV networks, FL, and MARL.} UAV-assisted wireless networking
-\cite{alhourani2014} and UAV-based FL are both active areas, typically
-addressing channel modelling, trajectory optimisation, or energy
-constraints in isolation from formal privacy guarantees. Deep
-Q-networks \cite{mnih2015} and federated reinforcement learning are
-likewise each individually established; combining per-agent DQN
-participation policies with federated Q-network sharing specifically
-under a DP-FL constraint, as in Section~\ref{sec:system}'s MARL layer,
-is comparatively underexplored.
+\textbf{UAV networks and FL.} UAV-assisted wireless networking
+\cite{alhourani2014} and UAV-based FL are both active areas. Zhang and
+Hanzo \cite{zhang2020tvt} analyse FL's communication-vs-accuracy
+trade-off over multi-UAV relay networks, and Fan et al.\
+\cite{fan2024} address efficiency-security trade-offs for FL under
+UAV mobility and dynamic topology; both, like the broader UAV-FL
+literature, optimise communication, mobility, or energy, in isolation
+from a formal per-client privacy guarantee. None addresses noise
+\emph{allocation} across a heterogeneous client population under DP,
+the gap this paper targets.
+
+\textbf{MARL for participation.} Deep Q-networks \cite{mnih2015} and
+federated reinforcement learning are each individually established;
+combining per-agent DQN participation policies with federated
+Q-network sharing specifically under a DP-FL constraint, as in
+Section~\ref{sec:system}'s MARL layer, is comparatively underexplored.
 
 \section{System Model}
 \label{sec:system}
@@ -707,6 +714,100 @@ adaptive participation rate vs.\ the static 60\% baseline.
 Bottom-right: cumulative DP-$\varepsilon$.}
 \label{fig:marl}
 \end{figure}
+
+\section{Ablation Study}
+\label{sec:ablation}
+
+Section~\ref{sec:results} established that adaptive calibration
+improves mean accuracy; this section isolates \emph{why} and \emph{how
+much of the mechanism is actually needed}, with three ablations: the
+mechanism itself (on vs.\ off, across three datasets with different
+heterogeneity profiles), whether the theoretical noise-variance
+argument (Corollary~\ref{cor:variance}) actually tracks the measured
+gains, and a sensitivity check on the step-counting precision inside
+Algorithm~\ref{alg:calibrate}.
+
+\subsection{Ablation A: The Mechanism Itself, Across Heterogeneity Profiles}
+Table~\ref{tab:ablation-mechanism} collects every dataset tested,
+uniform $\sigma$ against per-client adaptive $\sigma$, at an identical
+formal guarantee throughout. The three datasets span a wide range of
+client-size heterogeneity: CIFAR-10's Dirichlet partition yields a
+3.7--5.8$\times$ ratio between the largest and smallest client
+depending on seed; EuroSAT's is narrower; AIDER's worst-case client
+(61 samples) is an order of magnitude below its largest. The ablation
+is informative precisely because it does \emph{not} uniformly win: it
+wins decisively on CIFAR-10 and EuroSAT, where client-size variation
+gives the mechanism real room to reallocate noise, and does nothing on
+AIDER, where FedAvg's sample-weighted aggregation already renders the
+tiny worst-case clients the mechanism targets nearly irrelevant to the
+aggregate. This is the behaviour Theorem~\ref{thm:main} predicts: the
+mechanism is privacy-neutral and noise-minimal \emph{by construction},
+but it can only improve utility where there is noise to redistribute
+in the first place.
+
+\begin{table}[t]
+\centering
+\caption{Ablation A: mechanism on vs.\ off, all datasets tested.}
+\label{tab:ablation-mechanism}
+\begin{tabular}{lcccc}
+\toprule
+Dataset & Seeds & Uniform & Adaptive & Mean gap \\
+\midrule
+CIFAR-10 & 5 & 17.3\%$\pm$3.9 & 30.7\%$\pm$6.6 & $+13.4$pp \\
+EuroSAT & 3 & 38.2\%$\pm$8.3 & 54.5\%$\pm$4.8 & $+16.3$pp \\
+AIDER & 1 & 19.9\% & 19.7\% & $-0.2$pp \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Ablation B: Does the Noise-Variance Argument Predict the Gain?}
+Corollary~\ref{cor:variance} gives a closed-form, per-seed prediction
+for how much adaptive calibration should reduce aggregate noise
+variance, computed purely from each seed's realised client sizes, with
+no reference to any trained model or any observed accuracy. We compute
+$V_{\mathrm{adapt}}/V_{\mathrm{unif}}$ for all 5 CIFAR-10 seeds
+(Table~\ref{tab:ablation-variance}) and compare its ranking against
+the ranking of the \emph{measured} accuracy gap from
+Table~\ref{tab:cifar}, which earlier analysis
+(Section~\ref{sec:results}) found no simple single-variable predictor
+for.
+
+\begin{table}[t]
+\centering
+\caption{Ablation B: predicted noise-variance reduction vs.\ measured accuracy gap, per seed.}
+\label{tab:ablation-variance}
+\begin{tabular}{lccccc}
+\toprule
+Seed & 42 & 43 & 44 & 45 & 46 \\
+\midrule
+Variance reduction & 63.1\% & 56.0\% & 52.8\% & 58.1\% & 59.6\% \\
+Empirical gap (pp) & +18.1 & +9.9 & $-0.9$ & +16.5 & +23.7 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The two rankings agree exactly on 3 of 5 seeds (44 lowest, then 43,
+then 45), the only disagreement an adjacent swap between the two
+highest-ranked seeds (42, 46); Spearman's rank correlation is
+$\rho=0.9$. A purely structural, pre-training quantity, computable
+from the partition alone, predicts \emph{which} seeds will see the
+largest empirical gains almost as well as it could, which is
+independent support for Theorem~\ref{thm:main} and
+Corollary~\ref{cor:variance} beyond their proofs: the mechanism's
+benefit is not a black-box empirical regularity, it is substantially
+explained by the noise-variance argument the theory predicts, even
+under that argument's simplifying single-round linearisation.
+
+\subsection{Ablation C: Step-Counting Precision}
+Algorithm~\ref{alg:calibrate} computes batches per epoch as
+$\lceil n_i/b\rceil$ (Section~\ref{sec:accounting-bugs}, Error~3's
+companion fix); an earlier version used $\lfloor n_i/b\rfloor$,
+undercounting one trailing partial batch per epoch. For seed~42's
+worst-case client this moves $\sigma_{\mathrm{unif}}$ from 3.04 to
+3.08, a 1.3\% change. We find this precision detail matters for
+\emph{correctness} (it is, in miniature, the same undercounting
+failure mode as Error~1), but not materially for the reported
+accuracy numbers, which use the corrected ceiling throughout.
 
 \section{Discussion and Limitations}
 \label{sec:discussion}
