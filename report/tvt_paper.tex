@@ -7,6 +7,14 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{url}
+\usepackage{amsthm}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
+
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
 
 \begin{document}
 
@@ -184,7 +192,36 @@ participates in a federated round only if its instantaneous channel
 quality exceeds a minimum SNR threshold $\gamma_{\min}$; this
 channel-aware eligibility gate, combined with a fixed participation
 fraction, typically admits 11 of 20 UAVs per round in our evaluation
-setting.
+setting. Fig.~\ref{fig:architecture} shows the four processing layers
+each participating UAV and the parameter server interact with every
+round.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, minimum width=3.6cm, minimum height=0.8cm, align=center, font=\small},
+  arrow/.style={-{Stealth[length=2mm]}, thick}
+]
+  \node[box, fill=blue!8] (uav) {UAV $i$: local data $n_i$,\\channel state, battery};
+  \node[box, below=0.45cm of uav, fill=orange!10] (marl) {MARL layer: DQN\\participation policy};
+  \node[box, below=0.45cm of marl, fill=green!10] (dp) {DP-SGD: per-sample clip,\\noise $\sigma_i$ (Sec.~\ref{sec:method-dp})};
+  \node[box, below=0.45cm of dp, fill=purple!8] (incentive) {Incentive: PoRS commit,\\effort $e_i^\star$};
+  \node[box, below=0.45cm of incentive, fill=red!8] (server) {Parameter server:\\FedAvg + PoA blockchain};
+
+  \draw[arrow] (uav) -- (marl);
+  \draw[arrow] (marl) -- (dp);
+  \draw[arrow] (dp) -- (incentive);
+  \draw[arrow] (incentive) -- (server);
+  \draw[arrow] (server.west) -- ++(-1.2,0) |- (uav.west)
+    node[pos=0.25, left, font=\tiny, align=center] {aggregated weights,\\reward, policy update};
+\end{tikzpicture}
+\caption{Per-round processing stack at each participating UAV: a MARL
+policy decides whether to participate, DP-SGD trains locally with
+that client's own $\sigma_i$, PoRS commits a verifiable proof of the
+update, and the server aggregates, settles incentive payments, and
+commits the round to the blockchain before feeding results back.}
+\label{fig:architecture}
+\end{figure}
 
 \subsection{Federated Learning with DP-SGD}
 Each participating UAV $i$ holds a local dataset of $n_i$ samples and
@@ -194,16 +231,53 @@ assigned noise multiplier $\sigma_i$ (Section~\ref{sec:method-dp}). The
 parameter server aggregates via FedAvg, weighted by $n_i$.
 
 \subsection{Incentive Mechanism}
-A Stackelberg game models the parameter server as a leader setting a
-reward rate $\lambda^*$, with UAVs as followers choosing effort
-(additional local epochs) to maximise their own net utility given their
-individual cost coefficient $c_i$. The closed-form social-welfare-optimal
-rate is $\lambda^* = (-1+\sqrt{1+2\alpha H})/(2H)$ where $H=\sum_i 1/c_i$
-and $\alpha$ is the server's quality valuation; each UAV's best response
-is $e_i^*=\lambda^*/c_i$. A Proof-of-Resource-Sharing (PoRS) scheme
-requires each UAV to commit a cryptographic hash of its gradient
-update, a Merkle root over its training batches, and measured compute
-time and bytes transmitted, verified on-chain before token rewards are
+Participation is voluntary and costly (compute, energy), so a
+Stackelberg game models the parameter server as a leader committing to
+a reward rate $\lambda$ per unit of effort, and each UAV $i$ as a
+follower choosing effort $e_i\ge0$ (additional local training epochs)
+to maximise its own net utility
+\begin{equation}
+u_i(e_i;\lambda) = \lambda e_i - \tfrac{1}{2}c_i e_i^2,
+\label{eq:follower-utility}
+\end{equation}
+with $c_i>0$ UAV $i$'s private cost coefficient. Maximising
+\eqref{eq:follower-utility} over $e_i$ gives the unique best response
+$e_i^\star(\lambda) = \lambda/c_i$. The leader anticipates this and
+chooses $\lambda$ to maximise social welfare, the server's valuation of
+aggregate effort net of total reward paid,
+\begin{equation}
+W(\lambda) = \alpha\log\Big(1+\sum_i e_i^\star(\lambda)\Big) - \lambda\sum_i e_i^\star(\lambda),
+\label{eq:leader-welfare}
+\end{equation}
+with $\alpha>0$ the server's quality valuation.
+
+\begin{proposition}[Stackelberg equilibrium]
+\label{prop:stackelberg}
+Let $H=\sum_i 1/c_i$. The unique maximiser of \eqref{eq:leader-welfare}
+is
+\begin{equation}
+\lambda^\star = \frac{-1+\sqrt{1+2\alpha H}}{2H},
+\label{eq:lambda-star}
+\end{equation}
+and $\{(\lambda^\star, e_i^\star=\lambda^\star/c_i)\}$ is the unique
+Stackelberg equilibrium.
+\end{proposition}
+\begin{IEEEproof}
+Substituting $e_i^\star(\lambda)=\lambda/c_i$ gives aggregate effort
+$\sum_i e_i^\star(\lambda) = \lambda H$, so \eqref{eq:leader-welfare}
+becomes $W(\lambda)=\alpha\log(1+\lambda H) - \lambda^2 H$, concave in
+$\lambda$ since $H>0$. Setting $dW/d\lambda = \alpha H/(1+\lambda H) -
+2\lambda H = 0$ and simplifying gives the quadratic
+$2H\lambda^2+2\lambda-\alpha=0$; solving for the non-negative root
+gives \eqref{eq:lambda-star}. Concavity of $W$ makes it the unique
+maximiser, and best responses are themselves unique, giving a unique
+equilibrium.
+\end{IEEEproof}
+
+A Proof-of-Resource-Sharing (PoRS) scheme requires each UAV to commit a
+cryptographic hash of its gradient update, a Merkle root over its
+training batches, and measured compute time and bytes transmitted,
+verified on-chain before token rewards $\lambda^\star e_i^\star$ are
 distributed.
 
 \subsection{Blockchain Security Layer}
@@ -230,57 +304,192 @@ so experience propagates across the swarm without centralising state.
 \section{Per-Client Adaptive Differential Privacy}
 \label{sec:method-dp}
 
-\subsection{The Uniform-$\sigma$ Pitfall}
-Each client's $(\varepsilon,\delta)$-DP guarantee is tracked by an
-independent RDP accountant, composing the per-step cost of the
-subsampled Gaussian mechanism over that client's own sequence of noisy
-gradient releases. A client's privacy loss depends only on what is
-revealed about its own data; there is no formal requirement that every
-client in a population share one noise multiplier. Standard practice
-nonetheless derives a single global $\sigma$ by finding the smallest
-value that keeps the population's worst-case (smallest) client within
-budget, assuming that client participates in every round, and applies
-it uniformly. For a client with $n_i\gg n_{\min}$ samples, the DP-SGD
-subsampling rate $q_i=b/n_i$ is correspondingly smaller, so that
-client's actual per-step privacy cost at the shared $\sigma$ is far
-below its own target, noise it did not need to spend to clear its own
-guarantee.
+\subsection{Preliminaries: Rényi Differential Privacy}
+\label{sec:prelim}
+A randomised mechanism $\mathcal{M}$ satisfies $(\alpha,\rho)$-RDP if,
+for every pair of neighbouring datasets, the Rényi divergence of order
+$\alpha$ between $\mathcal{M}$'s output distributions is at most
+$\rho$ \cite{mironov2017}. For the Gaussian mechanism with sensitivity
+1 and noise scale $\sigma$,
+\begin{equation}
+\rho(\alpha,\sigma) = \frac{\alpha}{2\sigma^2}.
+\label{eq:rdp-gaussian}
+\end{equation}
+For the Poisson-subsampled Gaussian mechanism used by DP-SGD, with
+sampling rate $q$, the tight bound for integer $\alpha\ge2$
+\cite{wang2019} is
+\begin{equation}
+\rho_q(\alpha,\sigma) = \frac{1}{\alpha-1}\log\!\sum_{k=0}^{\alpha}\binom{\alpha}{k} q^k (1-q)^{\alpha-k}\, e^{\frac{k(k-1)}{2\sigma^2}},
+\label{eq:rdp-subsampled}
+\end{equation}
+with the conservative bound $\rho_q(\alpha,\sigma)\le\min\{q\cdot\rho(\alpha,\sigma),\,\rho(\alpha,\sigma)\}$
+used for non-integer $\alpha$. RDP composes additively over independent
+mechanisms: $T$ identical noisy releases incur total cost
+$T\rho_q(\alpha,\sigma)$. The resulting RDP guarantee converts to
+$(\varepsilon,\delta)$-DP via \cite{balle2020}
+\begin{equation}
+\varepsilon(\alpha,\rho,\delta) = \rho + \frac{\log(1/\delta) + \log\frac{\alpha-1}{\alpha}}{\alpha-1} - \frac{1}{\alpha},
+\label{eq:rdp-to-dp}
+\end{equation}
+and the tightest DP guarantee is obtained by minimising
+\eqref{eq:rdp-to-dp} over a grid of orders $\alpha$. We write
+$\varepsilon_i(\sigma)$ for client $i$'s resulting guarantee after $T_i$
+noisy releases at noise multiplier $\sigma$ and its own sampling rate
+$q_i$:
+\begin{equation}
+\varepsilon_i(\sigma) \;=\; \min_{\alpha}\; \varepsilon\big(\alpha,\, T_i\,\rho_{q_i}(\alpha,\sigma),\, \delta\big).
+\label{eq:eps-i}
+\end{equation}
+
+\subsection{Problem Statement}
+Consider a federation of $N$ clients, client $i$ holding $n_i$
+samples, training with batch size $b$ and $E$ local epochs over a
+round budget $R$, so $q_i = b/n_i$ and
+$T_i = R\cdot E\cdot\lceil n_i/b\rceil$. Given a target guarantee
+$(\varepsilon_{\max},\delta)$, \textbf{standard practice} fixes a single
+$\sigma$ shared by every client, set to the smallest value admissible
+for the hardest client:
+\begin{equation}
+\sigma_{\mathrm{unif}} = \min\{\sigma : \varepsilon_{i^\star}(\sigma) \le \varepsilon_{\max}\},\qquad i^\star = \arg\min_i n_i.
+\label{eq:sigma-unif}
+\end{equation}
+Because $\varepsilon_i(\sigma)$ is strictly decreasing in $\sigma$ for
+fixed $q_i, T_i$ \cite{abadi2016}, every client with $n_i>n_{i^\star}$
+then satisfies $\varepsilon_i(\sigma_{\mathrm{unif}}) < \varepsilon_{\max}$
+\emph{strictly}, spending privacy budget it was never required to
+spend, as noise with no corresponding protective value to that client.
 
 \subsection{Per-Client Adaptive Calibration}
-We instead assign each client $i$ its own noise multiplier $\sigma_i$,
-the smallest value such that $i$'s own RDP accountant, composed over
-its own sampling rate $q_i$ and step count for the full round budget
-$R$, stays within the shared target $(\varepsilon_{\max},\delta)$ even
-under worst-case (every-round) participation:
+We instead solve, independently for each client, for the smallest
+$\sigma_i$ clearing that client's own target:
 \begin{equation}
-\sigma_i = \min\{\sigma : \mathrm{RDP\text{-}to\text{-}DP}\big(\textstyle\sum_{r=1}^{R} \mathrm{RDP}_q(\sigma; q_i), \delta\big) \le \varepsilon_{\max}\},
+\sigma_i^\star = \min\{\sigma : \varepsilon_i(\sigma) \le \varepsilon_{\max}\},
+\label{eq:sigma-adaptive}
 \end{equation}
-found by binary search against the real accountant (Algorithm~\ref{alg:calibrate}).
-Each client trains locally with its own $\sigma_i$; FedAvg's existing
-sample-weighted aggregation then naturally emphasises the
-larger, now cleaner-signal clients, while the smallest clients, still
-necessarily the noisiest, retain their existing (small) aggregation
-weight. No change to the aggregation rule, the accountant's composition
-rule, or the formal per-client guarantee is required; only the noise
-each client is permitted to add changes.
+via bisection against the real accountant (Algorithm~\ref{alg:calibrate}).
+Each client trains with its own $\sigma_i^\star$, and FedAvg's
+existing sample-weighted aggregation is left unchanged.
 
 \begin{algorithm}[t]
 \caption{Per-client $\sigma$ calibration}
 \label{alg:calibrate}
 \begin{algorithmic}[1]
-\Require client sample count $n_i$, batch size $b$, local epochs $E$, round budget $R$, target $(\varepsilon_{\max},\delta)$
-\State $q_i \gets b / n_i$;\quad $\mathrm{steps} \gets E \cdot \lceil n_i / b \rceil \cdot R$
+\Require $n_i$, $b$, $E$, $R$, $(\varepsilon_{\max},\delta)$
+\State $q_i \gets b / n_i$;\quad $T_i \gets E \cdot \lceil n_i / b \rceil \cdot R$
 \State $(\sigma_{\text{lo}}, \sigma_{\text{hi}}) \gets (0.05, 50.0)$
 \While{$\sigma_{\text{hi}} - \sigma_{\text{lo}} > 10^{-3}$}
   \State $\sigma_{\text{mid}} \gets (\sigma_{\text{lo}}+\sigma_{\text{hi}})/2$
-  \State $\varepsilon \gets$ RDPAccountant$(\sigma_{\text{mid}}, q_i, \mathrm{steps})$.get\_epsilon($\delta$)
+  \State $\varepsilon \gets \varepsilon_i(\sigma_{\text{mid}})$ \Comment{Eq.~\eqref{eq:eps-i}}
   \If{$\varepsilon > \varepsilon_{\max}$} $\sigma_{\text{lo}} \gets \sigma_{\text{mid}}$
   \Else\ $\sigma_{\text{hi}} \gets \sigma_{\text{mid}}$
   \EndIf
 \EndWhile
-\State \Return $\sigma_{\text{hi}}$
+\State \Return $\sigma_i^\star \gets \sigma_{\text{hi}}$
 \end{algorithmic}
 \end{algorithm}
+
+\subsection{Decoupling, Monotonicity, and Optimality}
+The mechanism's correctness and benefit rest on three properties,
+stated here formally since they are what distinguishes a principled
+reallocation from an ad hoc heuristic.
+
+\begin{lemma}[Decoupling]
+\label{lem:decouple}
+For fixed $(b,E,R,\delta)$, $\varepsilon_i(\sigma)$ in \eqref{eq:eps-i}
+depends only on client $i$'s own sample count $n_i$ (through $q_i,
+T_i$) and $\sigma$, and not on any other client's data. Consequently
+the feasible region $\{\{\sigma_i\} : \varepsilon_i(\sigma_i)\le
+\varepsilon_{\max}\ \forall i\}$ factors as a Cartesian product of $N$
+independent one-dimensional feasible sets, and the $N$-client
+calibration problem decomposes into $N$ independent scalar problems.
+\end{lemma}
+\begin{IEEEproof}
+Immediate from \eqref{eq:eps-i}: $q_i$ and $T_i$ are functions of
+$n_i$ alone, and the RDP composition and conversion formulas
+\eqref{eq:rdp-subsampled}--\eqref{eq:rdp-to-dp} involve no term
+coupling two clients' sample counts.
+\end{IEEEproof}
+
+This is the formal counterpart of the fact that fixing Error~2 in
+Section~\ref{sec:accounting-bugs} (giving each client an independent
+accountant) establishes: per-client DP accounting is already
+decoupled, so nothing prevents per-client noise allocation.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{sigma_allocation.pdf}
+\caption{Proposition~\ref{prop:monotone} illustrated on the real
+CIFAR-10 seed-42 partition: $\sigma_i^\star$ for each of the 20 UAVs'
+actual sample counts, versus the single shared $\sigma_{\mathrm{unif}}$
+every client would use under standard practice.}
+\label{fig:sigma-allocation}
+\end{figure}
+
+\begin{proposition}[Monotonicity]
+\label{prop:monotone}
+For fixed $(b,E,R,\varepsilon_{\max},\delta)$, $\sigma_i^\star(n_i)$ is
+non-increasing in $n_i$ (Fig.~\ref{fig:sigma-allocation}).
+\end{proposition}
+\begin{IEEEproof}
+$q_i=b/n_i$ is non-increasing in $n_i$. $\rho_q(\alpha,\sigma)$ is
+non-decreasing in $q$ for fixed $(\alpha,\sigma)$, since
+\eqref{eq:rdp-subsampled} is a convex combination of terms weighted by
+$\binom{\alpha}{k}q^k(1-q)^{\alpha-k}$ that shifts mass toward larger
+$k$ (larger per-term RDP cost $e^{k(k-1)/2\sigma^2}$) as $q$ grows
+\cite{wang2019}; the conservative non-integer bound inherits the same
+monotonicity directly. Hence $\varepsilon_i(\sigma)$, a non-decreasing
+function of $\rho_{q_i}$ minimised over $\alpha$, is non-increasing in
+$n_i$ for every fixed $\sigma$. Since $\varepsilon_i(\cdot)$ is
+strictly decreasing in $\sigma$, the smallest $\sigma$ meeting a fixed
+target $\varepsilon_{\max}$ can only shrink or stay equal as
+$\varepsilon_i(\sigma,\cdot)$ decreases pointwise in $n_i$, i.e.\
+$\sigma_i^\star(n_i)$ is non-increasing in $n_i$.
+\end{IEEEproof}
+
+\begin{theorem}[Feasibility and noise-minimality]
+\label{thm:main}
+Let $\{\sigma_i^\star\}$ be Algorithm~\ref{alg:calibrate}'s output for
+every client. Then (a) every client independently satisfies
+$(\varepsilon_{\max},\delta)$-DP: $\varepsilon_i(\sigma_i^\star)\le
+\varepsilon_{\max}$ for all $i$; and (b) for any other assignment
+$\{\sigma_i'\}$ satisfying the same per-client guarantees,
+$\sigma_i' \ge \sigma_i^\star$ for every $i$. No feasible assignment
+can reduce any client's noise below $\sigma_i^\star$ without violating
+that client's own privacy constraint.
+\end{theorem}
+\begin{IEEEproof}
+(a) holds by construction of Algorithm~\ref{alg:calibrate} (bisection
+converges to the feasibility boundary from the feasible side, up to
+tolerance $10^{-3}$). For (b): since $\varepsilon_i(\sigma)$ is
+strictly decreasing and continuous in $\sigma$, the feasible set for
+client $i$ alone is exactly the half-line $[\sigma_i^\star,\infty)$.
+By Lemma~\ref{lem:decouple} the joint feasible set is the Cartesian
+product of these $N$ half-lines, so any feasible $\sigma_i'$ must lie
+in $[\sigma_i^\star,\infty)$.
+\end{IEEEproof}
+
+\begin{corollary}[Aggregate noise-variance reduction]
+\label{cor:variance}
+Model each client's per-round noise contribution to the aggregated
+update, linearised at a single step, as additive with per-coordinate
+variance $(\sigma_i C/b)^2$, and FedAvg's weighting as
+$n_i/\sum_j n_j$ over participating clients. Then the aggregated
+update's injected noise variance under adaptive calibration,
+$V_{\mathrm{adapt}} = (C/b)^2\sum_i (n_i/\sum_j n_j)^2 (\sigma_i^\star)^2$,
+satisfies $V_{\mathrm{adapt}} \le V_{\mathrm{unif}}$, with strict
+inequality whenever the population is not degenerate (some $n_i >
+n_{i^\star}$), since $\sigma_i^\star \le \sigma_{\mathrm{unif}}$ for
+every $i$ by Proposition~\ref{prop:monotone} and
+$\sigma_{i^\star}^\star = \sigma_{\mathrm{unif}}$ by definition
+\eqref{eq:sigma-unif}.
+\end{corollary}
+
+Corollary~\ref{cor:variance}'s linearised model is a simplification of
+the true, non-convex, multi-step DP-SGD trajectory, and we do not claim
+it as a tight end-to-end bound; its role is to make precise \emph{why}
+the mechanism should help, a single-round noise-floor argument,
+rather than to substitute for the empirical, multi-seed confirmation in
+Section~\ref{sec:results} that it actually does.
 
 \section{Three Privacy-Accounting Errors}
 \label{sec:accounting-bugs}
