@@ -821,14 +821,31 @@ the noise-\emph{allocation} improvement within that regime, not a claim
 of state-of-the-art absolute accuracy. All results are simulation-based
 on a single hardware platform; we have not yet validated the mechanism
 over an actual wireless UAV testbed, nor tested cohorts larger than 20
-UAVs, both queued as future work. The adaptive-clipping mechanism of
-Andrew et al.\ \cite{andrew2021}, evaluated separately in the
-accompanying technical report, has not yet been tested in combination
-with adaptive $\sigma$; whether the two compose is an open question.
+UAVs, both queued as future work.
+
+We did test whether adaptive clipping \cite{andrew2021} composes with
+adaptive $\sigma$, with a cautionary result: layered on top of either
+the uniform or the adaptive-$\sigma$ baseline (seed 42, otherwise
+identical settings), it collapses training to flat chance-level
+accuracy for the majority of the run (exactly 10.0\% for 12 and 18
+consecutive checkpoints respectively), destroying what is otherwise
+this paper's strongest single-seed CIFAR-10 result. This reads as an
+active regression, not a neutral "no benefit" result, and the most
+plausible cause is hyperparameter mismatch: adaptive clipping's update
+rate was tuned for a noise regime $2$--$5\times$ higher than the one
+this paper's correction establishes as actually valid, and most likely
+drives the clip norm to one of its configured bounds under the new,
+much lower noise level, though we have not directly instrumented its
+trajectory to confirm this. Not every mechanism that is individually
+correct composes safely without re-tuning once its operating
+assumptions change, a caution we think is worth stating plainly given
+how this paper's own headline number changed for exactly that reason.
+
 Finally, the seed-to-seed variance in CIFAR-10's gain ($+9.9$ to
-$+23.7$pp) indicates the mechanism's benefit, while consistently
-positive, is itself a function of the realised client-size
-distribution in ways not yet fully characterised.
+$+23.7$pp, Table~\ref{tab:cifar}) is substantially, though not
+completely, explained by Ablation~B's noise-variance argument
+(Section~\ref{sec:ablation}); residual variance not captured by that
+argument is not yet fully characterised.
 
 \section{Conclusion}
 \label{sec:conclusion}

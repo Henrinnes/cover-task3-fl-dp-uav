@@ -611,8 +611,14 @@ same way as this section's CIFAR-10 value): EuroSAT reverses the same way
 CIFAR-10 did below (its earlier rise-then-fade becomes a clean monotonic
 rise), but AIDER does \emph{not}, it remains at chance even with correct
 accounting, the one dataset in this report where "cohort too small" is
-not purely an accounting artefact. MobileNetV2 (Section~8.6) and adaptive
-clipping (Section~8.8) remain un-re-validated as of this report version.
+not purely an accounting artefact. MobileNetV2 (Section~8.6) was checked
+against the true worst-case client and needs no rerun (the true value
+requires \emph{less} noise than originally used, making the existing
+"fails to learn" result conservative, not invalidated). Adaptive
+clipping (Section~8.8) \textbf{has been re-validated and collapses
+training to flat chance accuracy} at the corrected $\sigma$, on top of
+either the uniform or the adaptive-per-client baseline; see that
+section for the result and the likely (unconfirmed) cause.
 
 \emph{Bug 3: the wrong worst-case client (found deriving a comparison
 baseline for a new mechanism, Section~\ref{sec:adaptive-sigma}).}
@@ -1276,18 +1282,19 @@ loss (already queued below) and/or excluding or flagging clients below a
 minimum sample-count threshold are the next concrete things to try, not a
 further $\sigma$ adjustment.
 
-\subsection{Adaptive Clipping: Implemented and Validated at an Over-Conservative $\sigma$}
+\subsection{Adaptive Clipping: Re-Validated, and It Breaks Training at the Corrected $\sigma$}
 \label{sec:adaptive-clipping}
 
-\emph{This section's validation used $\sigma=6.6$, which predates both the
-pooled-accounting fix and the worst-case-client fix (Section~8, Correction
-box, Bugs 2 and 3) and was found far more conservative than a correct
-per-client guarantee requires. The mechanism itself (below) is implemented
-and verified correct independent of $\sigma$'s value; whether it provides
-additional benefit on top of the correctly-calibrated $\sigma\approx3.08$
-uniform baseline, or on top of per-client adaptive calibration
-(Section~\ref{sec:adaptive-sigma}), is an open question this section does
-not yet answer.}
+\emph{This section's original validation used $\sigma=6.6$, which
+predates both the pooled-accounting fix and the worst-case-client fix
+(Section~8, Correction box, Bugs 2 and 3) and was found far more
+conservative than a correct per-client guarantee requires. The
+mechanism itself (below) is implemented and verified correct
+independent of $\sigma$'s value, and \textbf{has since been
+re-validated against the corrected $\sigma\approx3.08$ uniform baseline
+and against per-client adaptive calibration}: in both cases, adaptive
+clipping collapses training to flat chance-level accuracy. See the
+re-validation paragraph at the end of this section.}
 
 Adaptive clipping~\cite{andrew2021} tracks the DP-SGD clip norm $C$ toward
 a target quantile of the gradient-norm distribution instead of leaving it
@@ -1331,9 +1338,41 @@ It is not: $\sigma\approx3.08$ is for a uniform baseline, and
 per-client adaptive calibration (Section~\ref{sec:adaptive-sigma}) already
 learns substantially better than that uniform baseline on its own.
 Whether adaptive clipping adds anything further on top of either the
-corrected uniform or the adaptive-$\sigma$ result is the real open
-question this section leaves for re-validation, not the "narrows to more
-participants" conclusion previously drawn here.
+corrected uniform or the adaptive-$\sigma$ result was the open question
+this section left for re-validation.
+
+\paragraph{Re-validation at the corrected $\sigma$: both combinations
+collapse to chance.} Two 200-round CIFAR-10 runs (seed 42, otherwise
+identical to Section~8.1 and Section~\ref{sec:adaptive-sigma}'s
+settings) tested adaptive clipping on top of each baseline in turn.
+\textbf{Uniform $\sigma=3.08$ + adaptive clipping}: accuracy sits at
+exactly 10.0\% (chance) for 12 consecutive logged checkpoints, rounds
+90--200, worse than the same seed's 17.3\% final accuracy \emph{without}
+clipping. \textbf{Adaptive per-client $\sigma$ + adaptive clipping}:
+the collapse is earlier and total, exactly 10.0\% for 18 consecutive
+checkpoints, rounds 20--200, destroying what is otherwise this report's
+strongest CIFAR-10 result for this seed (35.4\% final without
+clipping). Both combinations collapse regardless of which noise
+baseline adaptive clipping is layered onto.
+
+This is not merely "no improvement," as the original $\sigma=6.6$
+result read: it is an active regression, and the likely cause is
+hyperparameter mismatch rather than a flaw in the mechanism itself.
+$\eta_C=0.001$ and \texttt{quantile\_noise\_multiplier=10.0} were
+derived and validated specifically against the $\sigma=6.6$ regime
+(this section, above); at the corrected, $2$--$5\times$ lower noise
+regime ($\sigma\in[1.4,3.1]$), the same per-step clip-norm update rate
+most plausibly drives $C$ to one of its configured bounds
+(\texttt{clip\_min=0.1} or \texttt{clip\_max=10.0}) and leaves it
+stuck there, destroying signal for the remainder of the run; we have
+not directly instrumented $C$'s trajectory to confirm this and report
+it as the most likely explanation given the config's own documented
+tuning history, not a verified root cause. Re-tuning $\eta_C$ and
+\texttt{quantile\_noise\_multiplier} specifically for the corrected
+noise regime, not simply re-running the mechanism as previously
+configured, is the concrete next step; this is now the primary
+adaptive-clipping item in future work (Section~9), replacing the
+previous "does it help" framing.
 
 \subsection{EuroSAT: From a Non-Sustained Signal to Real Learning}
 \label{sec:eurosat}
@@ -1472,15 +1511,21 @@ one to repeat and, on this evidence, easy to repeat more than once in
 the same project.
 
 \paragraph{Future work.}
-(i)~\textbf{Re-validate Sections~8.6 and~8.8 at correctly-calibrated
-$\sigma$.} MobileNetV2 (Section~8.6) has been checked against the true
-worst-case client and does not need rerunning: the true worst-case client
-needs \emph{less} noise than the value already used, so the existing
-"fails to learn" result is conservative, not invalidated. Adaptive
-clipping (Section~8.8) remains outstanding: it still needs re-running
-against the corrected $\sigma\approx3.08$ uniform baseline and, more
-interestingly, against the adaptive-$\sigma$ result, to see whether the
-two mechanisms compose;
+(i)~\textbf{Re-tune adaptive clipping for the corrected noise regime.}
+MobileNetV2 (Section~8.6) has been checked against the true worst-case
+client and does not need rerunning: the true worst-case client needs
+\emph{less} noise than the value already used, so the existing "fails
+to learn" result is conservative, not invalidated. Adaptive clipping
+(Section~8.8) has been re-validated against both the corrected
+$\sigma\approx3.08$ uniform baseline and the adaptive-$\sigma$ result,
+and collapses training to flat chance accuracy in both cases, not
+merely "no improvement" as the original, now-superseded result read.
+$\eta_C$ and \texttt{quantile\_noise\_multiplier} were tuned
+specifically for the old $\sigma=6.6$ regime and most plausibly drive
+the clip norm to one of its bounds at the much lower corrected noise
+level; re-tuning both for the new regime, not simply rerunning the
+mechanism as previously configured, is the concrete next step before
+any claim about whether adaptive clipping helps can be made;
 (i-b)~\textbf{Larger effective participation}, still worth testing on its
 own merits: more clients contributing gradient signal per round should
 improve the aggregate signal-to-noise ratio, and since each client's

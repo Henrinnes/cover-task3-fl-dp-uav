@@ -172,7 +172,7 @@ Key parameters and their research significance:
 | `dp.adaptive_sigma` | false | Per-client noise calibration instead of one shared σ: each client gets the smallest σ its own sample count allows, at an identical formal guarantee. Confirmed to substantially improve accuracy on CIFAR-10 (+13.4pp mean, 5 seeds) and EuroSAT (+16.3pp mean, 3 seeds); does **not** help on AIDER; see report Section 8.2 |
 | `dp.max_grad_norm` (C) | 1.0 | Gradient clipping threshold; bounds sensitivity |
 | `dp.target_epsilon` | 10.0 | Stops training if ε budget exceeded |
-| `dp.adaptive_clipping` | false | Tracks `max_grad_norm` toward the gradient-norm quantile instead of leaving it fixed (Andrew et al., 2021). Mechanism implemented and verified correct; showed no improvement when tested at the (since-superseded) σ=6.6, and has **not** been re-tested against the now-corrected σ=3.08 uniform baseline or against adaptive σ; see report Section 8.8 |
+| `dp.adaptive_clipping` | false | Tracks `max_grad_norm` toward the gradient-norm quantile instead of leaving it fixed (Andrew et al., 2021). Mechanism implemented and verified correct, but re-validated against the corrected σ=3.08 uniform baseline and against adaptive σ, and **collapses training to flat chance accuracy in both cases** (not merely "no improvement"). Likely cause: its update rate was tuned for the old σ=6.6 regime and needs re-tuning for the much lower corrected noise level; see report Section 8.8 |
 | `model.backbone` | simplecnn | `simplecnn` (~0.6M params) or `mobilenetv2` (~2.2M params, GroupNorm); `mobilenetv2` fails to learn under DP-SGD regardless of σ (checked against the true worst-case client, still fails), including with DP fully disabled, so at least partly architectural rather than noise-driven; see report Section 8.6 |
 | `data.dirichlet_alpha` | 0.5 | Non-IID degree: ↓α = more heterogeneous UAV data |
 | `channel.rician_k` | 10 dB | A2A channel quality: ↑K = stronger LoS |
@@ -276,9 +276,11 @@ framework's capabilities and config, not results. It includes:
   design mistakes caught via the accountant/real training rather than
   assumed (an initial "separate mechanism" design added ~150% ε overhead;
   the paper's own learning rate destabilised training applied
-  per-minibatch instead of per-round), but whether it helps on top of the
-  now-corrected σ=3.08 uniform baseline, or on top of adaptive σ, is still
-  untested (Section 8.8)
+  per-minibatch instead of per-round), then re-validated against both
+  the corrected σ=3.08 uniform baseline and adaptive σ, and **collapses
+  training to flat chance accuracy in both cases**, an active
+  regression, not neutral; most likely its update rate needs re-tuning
+  for the much lower corrected noise regime (Section 8.8)
 - A literature comparison against published DP-FL results, built only from
   numbers independently verified against each paper's primary source
   (Section 8.5)
