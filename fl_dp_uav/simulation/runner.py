@@ -298,6 +298,29 @@ class SimulationRunner:
 
             updates = self._parallel_train(selected, dp_cfg)
 
+            if dp_cfg.get("adaptive_clipping", False) and dp_cfg.get("sync_clip_norm", False):
+                # Andrew et al. (2021) track ONE clip norm at the population
+                # level, updated per round from signal aggregated across
+                # ~100 clients. This framework instead gives each FLClient
+                # its own persistent clip_norm, evolved independently every
+                # minibatch with no cross-client reconciliation -- a
+                # structural deviation, not just a tuning choice. Verified
+                # directly: clip_norm trajectories are nearly identical
+                # across sigma=6.6 and sigma=3.08 (same ~6x spread, same
+                # per-client pattern), ruling out sigma-dependent
+                # hyperparameter mismatch as the cause of the collapse seen
+                # at the corrected sigma; the likely cause is this
+                # never-synchronized per-client divergence corrupting the
+                # FedAvg aggregate whenever there's a real signal to
+                # corrupt (there wasn't one at the old, over-conservative
+                # sigma=6.6, so the flaw was invisible until now). Average
+                # participating clients' clip_norm and broadcast it back,
+                # approximating the paper's intended population-level
+                # tracking.
+                mean_clip_norm = sum(self.clients[cid].clip_norm for cid in selected) / len(selected)
+                for cid in selected:
+                    self.clients[cid].clip_norm = mean_clip_norm
+
             self.server.aggregate(updates)
 
             if rnd % self.log_interval == 0 or rnd == 1:
