@@ -40,6 +40,8 @@ class FLClient:
         quantile_noise_multiplier: float = 10.0,
         clip_min: float = 0.1,
         clip_max: float = 10.0,
+        class_weighted_loss: bool = False,
+        num_classes: Optional[int] = None,
     ):
         self.client_id = client_id
         self.model = copy.deepcopy(model).to(device)
@@ -52,6 +54,26 @@ class FLClient:
         self.noise_multiplier = noise_multiplier
         self.device = device
         self.last_num_steps = 0
+
+        # Class-weighted loss: each client reweights its own local
+        # cross-entropy by inverse class frequency (computed from ITS OWN
+        # partition only, no cross-client information), so majority-class
+        # collapse under severe imbalance (e.g. AIDER's 68% "normal" class)
+        # is penalised during local training rather than papered over by
+        # evaluation metrics after the fact. Off by default; no behaviour
+        # change unless enabled.
+        self.class_weights: Optional[torch.Tensor] = None
+        if class_weighted_loss:
+            if num_classes is None:
+                raise ValueError("num_classes is required when class_weighted_loss=True")
+            counts = torch.zeros(num_classes)
+            for _, y in dataset:
+                counts[y] += 1
+            counts = counts.clamp(min=1.0)  # avoid div-by-zero for classes absent locally
+            # "Balanced" inverse-frequency weighting (as in sklearn's
+            # class_weight="balanced"): weight_c = N / (num_classes * count_c).
+            weights = len(dataset) / (num_classes * counts)
+            self.class_weights = weights.to(device)
 
         # Adaptive clipping (Andrew et al., 2021, "Differentially Private
         # Learning with Adaptive Clipping", Theorem 1): track the clip norm
@@ -120,7 +142,7 @@ class FLClient:
         optimizer = torch.optim.SGD(
             self.model.parameters(), lr=self.lr, momentum=0.9, weight_decay=1e-4
         )
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(weight=self.class_weights)
 
         total_loss, total_steps = 0.0, 0
 
@@ -179,9 +201,11 @@ class FLClient:
         was_training = model.training
         model.eval()
 
+        class_weights = self.class_weights
+
         def loss_for_one(params, buffers, x, y):
             out = functional_call(model, (params, buffers), x.unsqueeze(0))
-            return F.cross_entropy(out, y.unsqueeze(0))
+            return F.cross_entropy(out, y.unsqueeze(0), weight=class_weights)
 
         # grad_and_value returns (grad_dict, scalar_loss) per sample — one GPU kernel,
         # no extra forward pass after optimizer.step().

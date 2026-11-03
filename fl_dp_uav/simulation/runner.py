@@ -170,6 +170,8 @@ class SimulationRunner:
                 quantile_noise_multiplier=dp_cfg.get("quantile_noise_multiplier", 3.0),
                 clip_min=dp_cfg.get("clip_min", 0.1),
                 clip_max=dp_cfg.get("clip_max", 10.0),
+                class_weighted_loss=fl_cfg.get("class_weighted_loss", False),
+                num_classes=num_classes,
             )
             for i in range(self.network.num_uavs)
         ]

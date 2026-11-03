@@ -24,6 +24,12 @@ fl:
   learning_rate: 0.01
   fraction_participate: 0.6   # fraction of eligible UAVs per round
   target_accuracy: 0.65       # convergence threshold
+  # Class-weighted local cross-entropy: off by default. Each client
+  # reweights its OWN local loss by inverse class frequency (computed
+  # only from its own partition, no cross-client info), to counter
+  # majority-class collapse under severe imbalance (AIDER: 68% "normal").
+  # See federated_learning/client.py; does not affect DP accounting.
+  class_weighted_loss: false
 
 dp:
   enabled: true
