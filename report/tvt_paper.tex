@@ -638,7 +638,13 @@ either way; this negative result rules out noise magnitude as AIDER's
 bottleneck and narrows the real cause to class imbalance interacting
 with the non-IID partition itself, motivating class-weighted loss
 rather than further noise-calibration work as the next step for this
-dataset.
+dataset. We tried it: each client reweights its own local
+cross-entropy by inverse class frequency, computed only from its own
+partition. Re-running the comparison with this change (5 seeds)
+raises the mean gap from $-0.2$pp (a wash, no class weighting) to
+$+1.4$pp, positive in all 5 seeds, but both arms still hover near the
+$20\%$ chance level with large within-run swings; a real, consistently
+positive effect, not a rescue.
 
 \begin{figure}[t]
 \centering

@@ -822,6 +822,39 @@ worst-case client interacting with the non-IID partition itself, exactly
 the candidates already identified in Section~\ref{sec:aider}'s future-work
 list, not a noise-calibration issue a sigma-allocation fix could address.
 
+\paragraph{Class-weighted loss: a small, consistently positive fix, not a rescue.}
+Each client's local cross-entropy loss was reweighted by inverse class
+frequency, computed only from that client's own partition (no
+cross-client information, no privacy cost since nothing new is
+released). Re-ran the uniform-vs-adaptive comparison on AIDER with
+this change, 5 seeds, 30 rounds each (Table~\ref{tab:aider-cwl}). Mean
+balanced accuracy rises from $20.1\%$ (uniform $\sigma$) to $21.5\%$
+(adaptive $\sigma$), a $+1.4$ percentage-point mean gap, positive in
+all 5 seeds, reversing the sign of the no-class-weighting result above
+(which was $-0.2$pp, effectively a wash). This is a real, directionally
+consistent improvement, but not a rescue: both arms still hover near
+the $20\%$ chance level for 5 classes, with large round-to-round swings
+within individual runs (e.g.\ seed~46's adaptive run: $16.9\%$ to
+$26.1\%$ within the same 30-round run). Class-weighted loss changes the
+sign of the adaptive-vs-uniform comparison without changing the
+headline conclusion that AIDER does not learn meaningfully above chance
+under either calibration scheme tested so far.
+
+\begin{table}[H]
+  \centering
+  \caption{AIDER with class-weighted loss, final balanced accuracy, 30 rounds, 5 seeds.}
+  \label{tab:aider-cwl}
+  \begin{tabular}{lccccc}
+    \toprule
+    Seed & 42 & 43 & 44 & 45 & 46 \\
+    \midrule
+    Uniform $\sigma$ & 20.5\% & 18.8\% & 20.5\% & 20.3\% & 20.2\% \\
+    Adaptive $\sigma$ & 21.3\% & 20.6\% & 20.9\% & 23.4\% & 21.1\% \\
+    Gap & $+0.7$pp & $+1.8$pp & $+0.5$pp & $+3.1$pp & $+0.9$pp \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
 \subsection{Incentive Mechanism Convergence}
 
 The optimal reward rate $\lambda^*$ from \eqref{eq:lambda_star} is recomputed each
@@ -1588,23 +1621,25 @@ previously stated here;
 (i-c)~\textbf{Diagnose AIDER's remaining failure.} Adaptive calibration
 ruled out noise magnitude as AIDER's problem (Section~\ref{sec:adaptive-sigma}):
 it is the one dataset in this report where giving every client its
-tightest-possible $\sigma$ did not change the outcome. The two live
-candidates are severe class imbalance (68\% majority class) and a very
-small worst-case client (61 samples, an order of magnitude below
-EuroSAT's 389 or CIFAR-10's $\sim$2500-average). Item~(vi) below
-(class-weighted loss) and a minimum per-client sample-count threshold are
-the concrete next experiments, not a further $\sigma$ mechanism;
+tightest-possible $\sigma$ did not change the outcome. Class-weighted
+loss (item~(vi) below) has since been tried: a real, consistently
+positive but modest effect ($+1.4$pp mean, 5 seeds), not a rescue. A
+minimum per-client sample-count threshold, and combining it with
+class-weighted loss, remain the concrete next experiments;
 (ii)~Add DP protection to the Q-network federation step for formal policy privacy;
 (iii)~replace PoRS simulation with SGX-based hardware attestation for deployment;
 (iv)~extend convergence analysis to 3D trajectory optimisation jointly with power
 allocation (WP2 interface);
 (v)~explore multi-task MARL where agents jointly optimise sensing, routing, and FL
 participation in a unified policy;
-(vi)~class-weighted loss for AIDER, as a complement to the stratified
-partitioning already implemented (Section~8.7), now the main open lever
-for AIDER specifically (item~(i-c)), since neither re-validation at
-correct $\sigma$ nor per-client adaptive calibration (this item's two
-original premises) resolved it on their own.
+(vi)~class-weighted loss for AIDER (Section~\ref{sec:adaptive-sigma}),
+as a complement to the stratified partitioning already implemented
+(Section~8.7): implemented and tested, a real but modest
+$+1.4$pp mean improvement over 5 seeds, not the rescue neither
+re-validation at correct $\sigma$ nor per-client adaptive calibration
+achieved alone either. A minimum per-client sample-count threshold,
+and combining it with class-weighted loss, are the concrete next
+experiments for AIDER specifically (item~(i-c)).
 
 \vspace{1em}
 \noindent\textbf{Acknowledgements.}
