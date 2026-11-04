@@ -829,17 +829,25 @@ the uniform or the adaptive-$\sigma$ baseline (seed 42, otherwise
 identical settings), it collapses training to flat chance-level
 accuracy for the majority of the run (exactly 10.0\% for 12 and 18
 consecutive checkpoints respectively), destroying what is otherwise
-this paper's strongest single-seed CIFAR-10 result. This reads as an
-active regression, not a neutral "no benefit" result, and the most
-plausible cause is hyperparameter mismatch: adaptive clipping's update
-rate was tuned for a noise regime $2$--$5\times$ higher than the one
-this paper's correction establishes as actually valid, and most likely
-drives the clip norm to one of its configured bounds under the new,
-much lower noise level, though we have not directly instrumented its
-trajectory to confirm this. Not every mechanism that is individually
-correct composes safely without re-tuning once its operating
-assumptions change, a caution we think is worth stating plainly given
-how this paper's own headline number changed for exactly that reason.
+this paper's strongest single-seed CIFAR-10 result. We instrumented
+the clip norm directly rather than guessing at a cause, and an
+initial hyperparameter-mismatch hypothesis did not survive that
+instrumentation: clip-norm trajectories are nearly identical between
+the old $\sigma=6.6$ regime and the corrected $\sigma=3.08$ one (the
+update rule contains no $\sigma$ term), so the flaw is structurally
+$\sigma$-independent, not a tuning problem. It was simply invisible at
+$\sigma=6.6$ because there was no real learning signal there for it to
+damage. Four remediation attempts, cross-client synchronisation, a
+$10\times$ slower update rate, a hard-capped clip ceiling, and the
+latter two combined, were each confirmed over a full 200-round run
+(a 15-round screen of the slower update rate looked promising at
+16.1\% accuracy, but the same configuration collapses to flat chance
+by round $\approx$100 over the full run), and all four converge to the
+same non-learning end state via one of two mechanisms, gradient
+explosion or degenerate single-class convergence. This points to the
+mechanism's per-minibatch, per-client granularity itself, a deviation
+from Andrew et al.'s original per-round, population-aggregated design,
+rather than to any tunable hyperparameter.
 
 Finally, the seed-to-seed variance in CIFAR-10's gain ($+9.9$ to
 $+23.7$pp, Table~\ref{tab:cifar}) is substantially, though not

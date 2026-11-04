@@ -617,8 +617,11 @@ requires \emph{less} noise than originally used, making the existing
 "fails to learn" result conservative, not invalidated). Adaptive
 clipping (Section~8.8) \textbf{has been re-validated and collapses
 training to flat chance accuracy} at the corrected $\sigma$, on top of
-either the uniform or the adaptive-per-client baseline; see that
-section for the result and the likely (unconfirmed) cause.
+either the uniform or the adaptive-per-client baseline; instrumented
+directly and confirmed structurally $\sigma$-independent (not a
+hyperparameter-mismatch problem), see that section for the full
+diagnosis across four tested remediation attempts, none of which
+worked.
 
 \emph{Bug 3: the wrong worst-case client (found deriving a comparison
 baseline for a new mechanism, Section~\ref{sec:adaptive-sigma}).}
@@ -1356,23 +1359,63 @@ clipping). Both combinations collapse regardless of which noise
 baseline adaptive clipping is layered onto.
 
 This is not merely "no improvement," as the original $\sigma=6.6$
-result read: it is an active regression, and the likely cause is
-hyperparameter mismatch rather than a flaw in the mechanism itself.
-$\eta_C=0.001$ and \texttt{quantile\_noise\_multiplier=10.0} were
-derived and validated specifically against the $\sigma=6.6$ regime
-(this section, above); at the corrected, $2$--$5\times$ lower noise
-regime ($\sigma\in[1.4,3.1]$), the same per-step clip-norm update rate
-most plausibly drives $C$ to one of its configured bounds
-(\texttt{clip\_min=0.1} or \texttt{clip\_max=10.0}) and leaves it
-stuck there, destroying signal for the remainder of the run; we have
-not directly instrumented $C$'s trajectory to confirm this and report
-it as the most likely explanation given the config's own documented
-tuning history, not a verified root cause. Re-tuning $\eta_C$ and
-\texttt{quantile\_noise\_multiplier} specifically for the corrected
-noise regime, not simply re-running the mechanism as previously
-configured, is the concrete next step; this is now the primary
-adaptive-clipping item in future work (Section~9), replacing the
-previous "does it help" framing.
+result read: it is an active regression. We instrumented $C$'s
+trajectory directly rather than guessing at a cause, and the
+hyperparameter-mismatch explanation an earlier version of this section
+offered (derived from the config's documented tuning history, not
+measured) turned out to be wrong.
+
+\paragraph{Diagnosis.} Reading each client's final \texttt{clip\_norm}
+after a short run at $\sigma=3.08$ showed values spread naturally
+across $[1.0, 6.4]$, not pinned to either configured bound
+(\texttt{clip\_min=0.1}, \texttt{clip\_max=10.0}); the "stuck at a
+bound" hypothesis does not hold. Running the identical diagnostic at
+the original $\sigma=6.6$ for comparison produced a near-identical
+spread and per-client pattern, which makes sense once the update rule
+is inspected: $C \mathrel{*}= \exp(-\eta_C(\hat b - c_q))$ contains no
+$\sigma$ term at all, so clip-norm dynamics are structurally
+$\sigma$-independent. The real difference between the two regimes is
+not the clipping mechanism, it is that $\sigma=6.6$ never had a real
+learning signal for clip-norm heterogeneity to damage (the baseline
+was already at chance), while $\sigma=3.08$ does (the baseline learns
+to 17.3\%); a pre-existing flaw became visible, not a new one
+introduced by the correction. We then tried, and ruled out in turn,
+three remediation attempts, each confirmed over a full 200-round run
+rather than a short screen. A short screen is not sufficient here: a
+$\eta_C=0.0001$ variant looked promising at 15 rounds (16.1\%
+accuracy), but the identical configuration collapses to flat chance by
+round $\approx$100 over the full 200 rounds, it only delays the
+collapse rather than preventing it.
+A cross-client synchronisation fix (averaging participating clients'
+\texttt{clip\_norm} and broadcasting it back each round, approximating
+Andrew et al.'s intended population-level per-round tracking instead
+of each client's independent, never-synced state) did not help either:
+$C$ instead grew toward \texttt{clip\_max} while loss exploded.
+Combining the slower update rate with a hard-capped
+\texttt{clip\_max=2.0} collapsed \emph{faster} (by round~50) via a
+visibly different mechanism, loss converges to a low, stable value
+(2.8--3.5) while accuracy stays flat at exactly 10.0\%, consistent
+with degenerate convergence to a single-class prediction rather than
+the earlier divergence. Four variants, two distinct failure
+signatures (explosion, degenerate convergence), the same non-learning
+end state in every case.
+
+\paragraph{Conclusion.} Adaptive clipping, at this framework's
+per-minibatch, per-client granularity, does not compose with a
+correctly-calibrated (lower) DP noise regime here. This is not a
+tuning problem fixable by adjusting $\eta_C$, $c_q$, or
+\texttt{clip\_max}, since all four configurations tried converge to
+the same outcome by two different mechanisms. We report this as a
+genuine, well-diagnosed negative result rather than continue searching
+for a working configuration; the mechanistic understanding (clip-norm
+dynamics are $\sigma$-independent, so the flaw predates the sigma
+correction and was simply invisible without a real signal to damage)
+is the contribution this section leaves, not a fix. Whether a
+population-level, per-round design closer to Andrew et al.'s original
+specification (rather than this framework's per-minibatch granularity)
+would avoid this failure mode entirely is the live question for future
+work (Section~9), not a further hyperparameter sweep at the current
+granularity.
 
 \subsection{EuroSAT: From a Non-Sustained Signal to Real Learning}
 \label{sec:eurosat}
@@ -1511,21 +1554,30 @@ one to repeat and, on this evidence, easy to repeat more than once in
 the same project.
 
 \paragraph{Future work.}
-(i)~\textbf{Re-tune adaptive clipping for the corrected noise regime.}
-MobileNetV2 (Section~8.6) has been checked against the true worst-case
-client and does not need rerunning: the true worst-case client needs
-\emph{less} noise than the value already used, so the existing "fails
-to learn" result is conservative, not invalidated. Adaptive clipping
-(Section~8.8) has been re-validated against both the corrected
-$\sigma\approx3.08$ uniform baseline and the adaptive-$\sigma$ result,
-and collapses training to flat chance accuracy in both cases, not
-merely "no improvement" as the original, now-superseded result read.
-$\eta_C$ and \texttt{quantile\_noise\_multiplier} were tuned
-specifically for the old $\sigma=6.6$ regime and most plausibly drive
-the clip norm to one of its bounds at the much lower corrected noise
-level; re-tuning both for the new regime, not simply rerunning the
-mechanism as previously configured, is the concrete next step before
-any claim about whether adaptive clipping helps can be made;
+(i)~\textbf{Redesign adaptive clipping's granularity, not its
+hyperparameters.} MobileNetV2 (Section~8.6) has been checked against
+the true worst-case client and does not need rerunning: the true
+worst-case client needs \emph{less} noise than the value already used,
+so the existing "fails to learn" result is conservative, not
+invalidated. Adaptive clipping (Section~8.8) has been re-validated
+against both the corrected $\sigma\approx3.08$ uniform baseline and the
+adaptive-$\sigma$ result, and collapses training to flat chance
+accuracy in both cases. Four remediation attempts, cross-client
+synchronisation, a $10\times$ slower update rate, a hard-capped
+\texttt{clip\_max}, and the two combined, were tried and each
+confirmed over a full 200-round run; all four converge to the same
+non-learning end state via one of two mechanisms (gradient explosion
+or degenerate single-class convergence). This rules out hyperparameter
+mismatch as the cause (clip-norm dynamics were directly instrumented
+and shown to be structurally $\sigma$-independent, not tuned for the
+wrong regime) and points instead to the mechanism's per-minibatch,
+per-client granularity itself, a deviation from Andrew et al.'s
+original per-round, population-aggregated design. Implementing that
+original granularity (one clip norm tracked at the server, updated
+once per round from signal aggregated across all participating
+clients, rather than each client evolving its own independent,
+per-minibatch value) is the concrete next step, not a further
+hyperparameter sweep at the current granularity;
 (i-b)~\textbf{Larger effective participation}, still worth testing on its
 own merits: more clients contributing gradient signal per round should
 improve the aggregate signal-to-noise ratio, and since each client's
